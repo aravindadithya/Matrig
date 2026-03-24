@@ -1,0 +1,50 @@
+{
+    "name": "Torch Dev Container",
+    "image": "vastai/pytorch:cuda-13.0.2-auto",
+    "workspaceFolder": "/workspaces", 
+    
+    "runArgs": [
+        "--gpus", "all",
+        "--shm-size", "16gb"
+    ],
+
+    "remoteEnv": {
+        "PYTHONPATH": "${containerWorkspaceFolder}",
+        "PATH": "/venv/main/bin/:${containerEnv:PATH}"
+    },
+    
+    "customizations": {
+        "vscode": {
+            "extensions": [
+                "ms-python.python",
+                "ms-toolsai.jupyter",
+                "ms-python.vscode-pylance",
+                "google.geminicodeassist",
+                "google.gemini-cli-vscode-ide-companion"
+            ],
+            "settings": {
+                "python.defaultInterpreterPath": "/venv/main/bin/python",
+                "terminal.integrated.cwd": "${containerWorkspaceFolder}",
+                "python.analysis.extraPaths": ["${containerWorkspaceFolder}"],
+                "python.analysis.indexing": false,
+                "python.analysis.diagnosticMode": "openFilesOnly",
+                "python.analysis.typeCheckingMode": "off",
+                "python.analysis.exclude": [
+                                                "**/venv/**", 
+                                                "**/.git/**", 
+                                                "**/datasets/**", 
+                                                "**/wandb/**",
+                                                "**/outputs/**"
+                                            ],
+                "files.watcherExclude": {
+                                                "**/venv/**": true,
+                                                "**/datasets/**": true,
+                                                "**/.git/**": true
+                                       }
+                        }
+                }
+    },
+
+    "postCreateCommand": "apt-get update && apt-get install -y tmux git-lfs && /venv/main/bin/python -m pip install --upgrade pip && if [ -f ${containerWorkspaceFolder}/requirements.txt ]; then /venv/main/bin/python -m pip install -r ${containerWorkspaceFolder}/requirements.txt; fi",
+    "remoteUser": "root"
+}
