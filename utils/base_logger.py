@@ -18,6 +18,7 @@ class BaseLogger:
         self.lfn = config.get('lfn')
         self.net = config.get('net')
         self.scheduler = config.get('scheduler')
+        self.task_type = config.get('task_type', 'classification')
 
         self._initialize_wandb(config)
 
@@ -49,12 +50,17 @@ class BaseLogger:
 
         # Define 'epoch' as the step metric for all epoch-level logs
         wandb.define_metric("epoch")
-        metrics_to_sync = [
-            "train/accuracy", "train/loss", "val/accuracy", "val/loss",
-            "learning_rate", "Validation Confusion Matrix", "Validation Predictions",
-            "Test Confusion Matrix",
-            "Test Predictions", "fixed_val_images"
-        ]
+        if self.task_type == 'regression':
+            metrics_to_sync = [
+                "train/loss", "val/loss", "learning_rate", "fixed_val_images"
+            ]
+        else:
+            metrics_to_sync = [
+                "train/accuracy", "train/loss", "val/accuracy", "val/loss",
+                "learning_rate", "Validation Confusion Matrix", "Validation Predictions",
+                "Test Confusion Matrix",
+                "Test Predictions", "fixed_val_images"
+            ]
         wandb.define_metric("adjacent_balance/*", step_metric="epoch")
         for metric in metrics_to_sync:
             wandb.define_metric(metric, step_metric="epoch")
@@ -62,6 +68,25 @@ class BaseLogger:
     def get_viz_inputs(self, val_loader):
 
         try:
+            if self.task_type == 'regression':
+                collected_inputs, collected_targets = [], []
+                for batch in val_loader:
+                    batch_inputs, batch_targets = batch[:2]
+                    for i in range(len(batch_inputs)):
+                        if len(collected_inputs) < self.max_images:
+                            collected_inputs.append(batch_inputs[i])
+                            collected_targets.append(batch_targets[i])
+                    if len(collected_inputs) >= self.max_images:
+                        break
+
+                if not collected_inputs:
+                    print("Viz setup failed: Could not collect any samples from val_loader.")
+                    return None, None
+
+                inputs = torch.stack(collected_inputs).cuda(non_blocking=True)
+                targets = torch.stack(collected_targets).cuda(non_blocking=True)
+                return inputs, targets
+
             # Get num_classes from config, with a default.
             num_classes = self.config.get('num_classes')
             images_per_class = max(1, self.max_images // num_classes)
@@ -276,8 +301,8 @@ class BaseLogger:
                 all_logs.update(global_logs)
                 per_sample_visuals.update(sample_logs)
 
-        print("Logging Prediction Table...")
-        all_logs.update(self.log_predictions_table(net, "Validation Predictions", outputs_precomputed=outputs, extra_visuals=per_sample_visuals))
+        # print("Logging Prediction Table...")
+        # all_logs.update(self.log_predictions_table(net, "Validation Predictions", outputs_precomputed=outputs, extra_visuals=per_sample_visuals))
 
         if all_logs:
             all_logs["epoch"] = epoch

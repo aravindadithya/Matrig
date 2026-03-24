@@ -10,43 +10,36 @@ scaler = torch.amp.GradScaler('cuda')
 fn_data = {}
 
 
-def check_and_log_balancedness(net, epoch):
-    """
-    Calculates and logs a "balancedness" condition between adjacent layers,
-    checking the similarity between (W_i * W_i^T) and (W_{i+1}^T * W_{i+1}).
-    This condition is relevant in the analysis of deep linear networks.
-    """
-    balance_logs = {}
+def count_sparsity(net, epoch):
+    eps = 1e-6
+    sparsity_logs = {"epoch": epoch}
 
-    # Collect all linear layers in the order of execution.
-    linear_modules = []
+    total_params = 0
+    total_non_zero = 0
+
     for name, module in net.named_modules():
-        # Check for linear layers (both standard and our custom RFA ones)
-        if hasattr(module, 'weight') and isinstance(module.weight, torch.nn.Parameter) and module.weight.dim() == 2:
-            linear_modules.append((name, module))
+        if hasattr(module, 'weight') and isinstance(module.weight, torch.nn.Parameter):
+            weight = module.weight.detach()
+            layer_total = weight.numel()
+            layer_non_zero = (weight.abs() > eps).sum().item()
+            layer_zero = layer_total - layer_non_zero
 
-    # Iterate through adjacent pairs of layers.
-    for i in range(len(linear_modules) - 1):
-        name_i, module_i = linear_modules[i]
-        name_j, module_j = linear_modules[i+1]
+            total_params += layer_total
+            total_non_zero += layer_non_zero
 
-        W_i = module_i.weight.detach()
-        W_j = module_j.weight.detach()
+            sparsity_logs[f"sparsity/non_zero_count/{name}"] = layer_non_zero
+            sparsity_logs[f"sparsity/zero_count/{name}"] = layer_zero
+            sparsity_logs[f"sparsity/non_zero_pct/{name}"] = 100.0 * layer_non_zero / layer_total
 
-        # Calculate the two matrices for comparison.
-        # A = W_i * W_i^T, B = W_{j}^T * W_{j}
-        A = W_i @ W_i.t()
-        B = W_j.t() @ W_j
+    total_zero = total_params - total_non_zero
+    if total_params > 0:
+        sparsity_logs["sparsity/non_zero_count/total"] = total_non_zero
+        sparsity_logs["sparsity/zero_count/total"] = total_zero
+        sparsity_logs["sparsity/non_zero_pct/total"] = 100.0 * total_non_zero / total_params
 
-        alignment = F.cosine_similarity(A.flatten(), B.flatten(), dim=0)
-        balance_logs[f"cosine_similarity/{name_i}_vs_{name_j}"] = alignment.item()
-
-        diff_norm = torch.norm(A - B, p='fro')
-        balance_logs[f"frobenius_diff/{name_i}_vs_{name_j}"] = diff_norm.item()
-
-    if balance_logs:
-        balance_logs["epoch"] = epoch
-        wandb.log(balance_logs)
+    if len(sparsity_logs) > 1:
+        wandb.log(sparsity_logs)
+ 
 
 def train_network(config, num_epochs = 5, checkpoint_interval=10):
 
@@ -93,7 +86,7 @@ def train_network(config, num_epochs = 5, checkpoint_interval=10):
         # Validation loss and accuracy are calculated after backprob for each epoch
         val_loss, val_acc, val_preds, val_targets = val_step(net, val_loader, config, lfn)       
 
-        check_and_log_balancedness(net, i)
+        count_sparsity(net, i)
 
         log_data = {
             "epoch": i,
@@ -123,9 +116,9 @@ def train_network(config, num_epochs = 5, checkpoint_interval=10):
             wandb.run.summary["best_val_accuracy"] = best_val_acc
             wandb.run.summary["best_val_loss"] = best_val_loss
             
-            logger.log_confusion_matrix(y_true=val_targets, preds=val_preds,
-                                        epoch=i, class_names=[str(c) for c in range(10)],
-                                        log_key="Validation Confusion Matrix")
+            # logger.log_confusion_matrix(y_true=val_targets, preds=val_preds,
+            #                             epoch=i, class_names=[str(c) for c in range(10)],
+            #                             log_key="Validation Confusion Matrix")
 
             if logger.inputs is not None:
                 logger.log_visuals(net, epoch=i)
@@ -154,9 +147,9 @@ def train_network(config, num_epochs = 5, checkpoint_interval=10):
     wandb.run.summary["best_test_accuracy"] = best_test_acc
     wandb.run.summary["best_test_loss"] = best_test_loss
     
-    logger.log_confusion_matrix(y_true=test_targets, preds=test_preds,
-                                epoch=i, class_names=[str(i) for i in range(10)],
-                                log_key="Test Confusion Matrix")
+    # logger.log_confusion_matrix(y_true=test_targets, preds=test_preds,
+    #                             epoch=i, class_names=[str(i) for i in range(10)],
+    #                             log_key="Test Confusion Matrix")
 
     #logger.log_predictions_table(net, test_loader, epoch=i, log_key="Test Predictions", limit=256)
     

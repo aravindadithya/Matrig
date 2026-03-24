@@ -1,46 +1,50 @@
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
-import math
 
-class Nonlinearity(nn.Module):
-    def __init__(self):
-        super(Nonlinearity, self).__init__()
-
-    def forward(self, x):
-        return F.relu(x)
-        #return F.tanh(x)
 
 class Net(nn.Module):
-    def __init__(self, dim, num_classes=2):
+    def __init__(self, dim, num_classes=2, hidden_layers=None, bias=False, seed=None):
+        """
+        Fully connected neural network with configurable hidden layers.
+        
+        Args:
+            dim: Input dimension
+            num_classes: Number of output classes
+            hidden_layers: List of hidden layer sizes (default: None means single hidden layer of 1024)
+                          Example: [1024, 512, 256] creates 3 hidden layers
+            bias: Whether to use bias in linear layers (default: False)
+            seed: Random seed for weight initialization (default: None)
+        """
         super(Net, self).__init__()
-        bias = False
-        k = 1024
+        
+        if seed is not None:
+            torch.manual_seed(seed)
+        
         self.dim = dim
-        self.width = k
-
-        self.features = nn.Sequential(
-            nn.Linear(dim, k, bias=bias),
-            Nonlinearity(),
-            #nn.Linear(k, k, bias=bias),
-            #Nonlinearity(),
-        )
-
-        self.classifier = nn.Sequential(           
-            nn.Linear(k, num_classes, bias=bias)
-        )
-        self.apply(self._init_weights)
-
-    def _init_weights(self, m):
-        if isinstance(m, nn.Linear):
-            #nn.init.kaiming_uniform_(m.weight, a=math.sqrt(5))
-            nn.init.xavier_uniform_(m.weight)
-            if m.bias:
-                fan_in, _ = nn.init._calculate_fan_in_and_fan_out(m.weight)
-                bound = 1 / math.sqrt(fan_in) if fan_in > 0 else 0
-                nn.init.uniform_(m.bias, -bound, bound)
+        self.num_classes = num_classes
+        self.bias = bias
+        
+        # Default hidden layers if not specified
+        if hidden_layers is None:
+            hidden_layers = [1024]
+        
+        self.hidden_layers = hidden_layers
+        
+        # Build the network: input -> hidden layers -> output
+        layers = []
+        prev_dim = dim
+        
+        # Add hidden layers (fully connected with no non-linearity between them)
+        for hidden_dim in hidden_layers:
+            layers.append(nn.Linear(prev_dim, hidden_dim, bias=bias))
+            prev_dim = hidden_dim
+        
+        # Add output layer
+        layers.append(nn.Linear(prev_dim, num_classes, bias=bias))
+        
+        self.network = nn.Sequential(*layers)
 
     def forward(self, x):
-        x = self.features(x)
-        x = self.classifier(x)
+        """Forward pass through all layers (no non-linearity between them)."""
+        x = self.network(x)
         return x
