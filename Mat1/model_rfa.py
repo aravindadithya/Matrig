@@ -4,10 +4,11 @@ import sys
 
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 from utils.initializer import initialize_linear_layer, arora_balanced_initialization
-
+from utils.linear_rfa import LinearRFA
 
 class Net(nn.Module):
     def __init__(
@@ -21,7 +22,7 @@ class Net(nn.Module):
         init_gain=1.0,
     ):
         """
-        Fully connected neural network with configurable hidden layers.
+        Fully connected neural network with random feedback alignment and configurable hidden layers.
 
         Args:
             dim: Input dimension
@@ -30,7 +31,7 @@ class Net(nn.Module):
                           Example: [1024, 512, 256] creates 3 hidden layers
             bias: Whether to use bias in linear layers (default: False)
             seed: Random seed for weight initialization (default: None)
-            init_method: Weight initialization method
+            init_method: Weight initialization method for forward weights
                          (kaiming, he, glorot, arora_balanced, orthogonal)
             init_gain: Gain/scaling factor for initialization
         """
@@ -54,15 +55,16 @@ class Net(nn.Module):
         prev_dim = dim
 
         for hidden_dim in hidden_layers:
-            layers.append(nn.Linear(prev_dim, hidden_dim, bias=bias))
+            layers.append(LinearRFA(prev_dim, hidden_dim, bias=bias))
             prev_dim = hidden_dim
 
+
         self.features = nn.Sequential(*layers)
-        self.classifier = nn.Linear(prev_dim, num_classes, bias=bias)
+        self.classifier = LinearRFA(prev_dim, num_classes, bias=bias)
         self._initialize_weights()
 
     def _initialize_weights(self):
-        linear_layers = [m for m in self.modules() if isinstance(m, nn.Linear)]
+        linear_layers = [m for m in self.modules() if isinstance(m, LinearRFA)]
         print(linear_layers)
         if not linear_layers:
             return
@@ -75,7 +77,7 @@ class Net(nn.Module):
                 bias_value=0.0,
             )
         return
-
+        
     def forward(self, x):
         x = self.features(x)
         x = self.classifier(x)

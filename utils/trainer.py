@@ -10,37 +10,6 @@ scaler = torch.amp.GradScaler('cuda')
 fn_data = {}
 
 
-def count_sparsity(net, epoch):
-    eps = 1e-6
-    sparsity_logs = {"epoch": epoch}
-
-    total_params = 0
-    total_non_zero = 0
-
-    for name, module in net.named_modules():
-        if hasattr(module, 'weight') and isinstance(module.weight, torch.nn.Parameter):
-            weight = module.weight.detach()
-            layer_total = weight.numel()
-            layer_non_zero = (weight.abs() > eps).sum().item()
-            layer_zero = layer_total - layer_non_zero
-
-            total_params += layer_total
-            total_non_zero += layer_non_zero
-
-            sparsity_logs[f"sparsity/non_zero_count/{name}"] = layer_non_zero
-            sparsity_logs[f"sparsity/zero_count/{name}"] = layer_zero
-            sparsity_logs[f"sparsity/non_zero_pct/{name}"] = 100.0 * layer_non_zero / layer_total
-
-    total_zero = total_params - total_non_zero
-    if total_params > 0:
-        sparsity_logs["sparsity/non_zero_count/total"] = total_non_zero
-        sparsity_logs["sparsity/zero_count/total"] = total_zero
-        sparsity_logs["sparsity/non_zero_pct/total"] = 100.0 * total_non_zero / total_params
-
-    if len(sparsity_logs) > 1:
-        wandb.log(sparsity_logs)
- 
-
 def train_network(config, num_epochs = 5, checkpoint_interval=10):
 
     torch.set_float32_matmul_precision('high')
@@ -58,7 +27,6 @@ def train_network(config, num_epochs = 5, checkpoint_interval=10):
     test_loader = config['test_loader']
 
     net.cuda()
-
     # This is supposed to improve performance but I found mixed results 
     # with diminishing returns
     #net = torch.compile(net)
@@ -68,7 +36,7 @@ def train_network(config, num_epochs = 5, checkpoint_interval=10):
 
     
     # wandb.watch can cause significant overhead or hangs with log="all" on some systems
-    # wandb.watch(net, log="all", log_freq=100, idx=0)
+    wandb.watch(net, log="all", log_freq=100, idx=0)
     best_test_acc = 0
     best_test_loss = 0
 
@@ -80,14 +48,16 @@ def train_network(config, num_epochs = 5, checkpoint_interval=10):
     for i in range(start_epoch, start_epoch + num_epochs):
 
         print("EPOCH: ", i)
-        model_saved = False
+        logger.log_matrix_diagnostics(i)
+        logger.log_agop(i)
+        logger.count_sparsity(i)
+        
         #Train loss and accuracy are calculated on the fly during backprob for each epoch
         train_loss, train_acc = train_step(net, optimizer, lfn, train_loader, config)
         # Validation loss and accuracy are calculated after backprob for each epoch
         val_loss, val_acc, val_preds, val_targets = val_step(net, val_loader, config, lfn)       
 
-        count_sparsity(net, i)
-
+        
         log_data = {
             "epoch": i,
             "train/accuracy": train_acc,

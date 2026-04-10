@@ -6,7 +6,10 @@ from torch.amp import autocast
 import io
 import os
 import math
+import hickle as hkl
 from utils.cnn_logger import CNNLogger
+from utils.agop_fc import verify_NFA
+from utils.linear_rfa import LinearRFA
 
 
 class BaseLogger:
@@ -19,6 +22,10 @@ class BaseLogger:
         self.net = config.get('net')
         self.scheduler = config.get('scheduler')
         self.task_type = config.get('task_type', 'classification')
+        self.train_loader = config.get('train_loader')
+
+        # Store initial network state for AGOP computation
+        self.init_net = self._get_initial_net()
 
         self._initialize_wandb(config)
 
@@ -35,6 +42,11 @@ class BaseLogger:
             self._resume_run()
         else:
             self._log_initial_artifacts(self.inputs)
+
+    def _get_initial_net(self):
+        """Create a copy of the initial network state for AGOP computation."""
+        import copy
+        return copy.deepcopy(self.net)
 
     def _initialize_wandb(self, config):
 
@@ -62,6 +74,8 @@ class BaseLogger:
                 "Test Predictions", "fixed_val_images"
             ]
         wandb.define_metric("adjacent_balance/*", step_metric="epoch")
+        wandb.define_metric("matrix_product/*", step_metric="epoch")
+        wandb.define_metric("agop/*", step_metric="epoch")
         for metric in metrics_to_sync:
             wandb.define_metric(metric, step_metric="epoch")
 
@@ -308,6 +322,126 @@ class BaseLogger:
             all_logs["epoch"] = epoch
             wandb.log(all_logs)
         print("Visuals Logging Completed.")
+
+    def log_agop(self, epoch):
+        """Log AGOP metrics for each linear layer."""
+        if self.train_loader is None or self.init_net is None:
+            return
+
+        # Get the sequential module in a network-agnostic way
+        linear_layers = [
+            m for m in self.net.features.modules()
+            if isinstance(m, (torch.nn.Linear, LinearRFA))
+        ]
+        
+        logs = {"epoch": epoch}
+        
+        for layer_idx in range(len(linear_layers)):
+            try:
+                agop_metrics = verify_NFA(
+                    net=self.net,
+                    init_net=self.init_net,
+                    trainloader=self.train_loader,
+                    layer_idx=layer_idx,
+                    max_batch=10,
+                    classes=784,
+                    chunk_idx=8
+                )
+                # Log AGOP metrics for this layer
+                for metric_name, value in agop_metrics.items():
+                    logs[f"agop/layer_{layer_idx}/{metric_name}"] = value
+                    
+            except Exception as e:
+                print(f"Failed to compute AGOP for layer {layer_idx}: {e}")
+                continue
+
+        if len(logs) > 1:  # More than just epoch
+            wandb.log(logs)
+
+    def count_sparsity(self, epoch):
+        """Count and log sparsity metrics for the network."""
+        eps = 1e-6
+
+        total_params = 0
+        total_non_zero = 0
+
+        for module in self.net.modules():
+            if hasattr(module, 'weight') and isinstance(module.weight, torch.nn.Parameter):
+                weight = module.weight.detach()
+                layer_total = weight.numel()
+                layer_non_zero = (weight.abs() > eps).sum().item()
+
+                total_params += layer_total
+                total_non_zero += layer_non_zero
+
+        if total_params > 0:
+            total_zero = total_params - total_non_zero
+            wandb.log({
+                "epoch": epoch,
+                "sparsity/non_zero_count/total": total_non_zero,
+                "sparsity/zero_count/total": total_zero,
+            })
+
+    def _load_target_matrix(self, device):
+        """Load target matrix from config."""
+        matrix_path = self.config.get("target_matrix_path")
+        if not matrix_path:
+            return None
+
+        if not os.path.exists(matrix_path):
+            print(f"Target matrix path not found: {matrix_path}")
+            return None
+
+        matrix_np = hkl.load(matrix_path)
+        target_matrix = torch.as_tensor(matrix_np, dtype=torch.float32, device=device)
+        return target_matrix
+
+    def _compute_product_matrix(self, linear_weights):
+        """Compute product matrix for layers [W1, W2, ..., WL]."""
+        # For layers [W1, W2, ..., WL], the effective matrix is WL ... W2 W1.
+        product = linear_weights[0]
+        for w in linear_weights[1:]:
+            product = w @ product
+        return product
+
+    def log_matrix_diagnostics(self, epoch):
+        """Log matrix diagnostics for the network."""
+        linear_weights = [ m.weight for m in self.net.modules() if 
+            isinstance(m, (torch.nn.Linear, LinearRFA))
+        ]
+
+        if not linear_weights:
+            return
+    
+        target_matrix = self._load_target_matrix(device='cuda')
+        logs = {"epoch": epoch}
+
+        with torch.no_grad():
+            product_matrix = self._compute_product_matrix([w.detach() for w in linear_weights])
+            if target_matrix is not None:
+                if product_matrix.shape == target_matrix.shape:
+                    logs["matrix_product/||product - target||_F"] = torch.linalg.norm(
+                        product_matrix - target_matrix, ord='fro'
+                    ).item()
+                else:
+                    print(
+                        "Skipping product-target diff norm due to shape mismatch: "
+                        f"product={tuple(product_matrix.shape)}, target={tuple(target_matrix.shape)}"
+                    )
+
+            for i in range(len(linear_weights) - 1):
+                wi = linear_weights[i].detach()
+                wi1 = linear_weights[i + 1].detach()
+
+                gram_left = wi @ wi.T
+                gram_right = wi1.T @ wi1
+                gram_diff = gram_left - gram_right
+
+                logs[f"balance/||W{i}W{i}T||_F"] = torch.linalg.norm(gram_left, ord='fro').item()
+                logs[f"balance/||W{i+1}TW{i+1}||_F"] = torch.linalg.norm(gram_right, ord='fro').item()
+                logs[f"balance/||W{i} - W{i+1}||_F"] = torch.linalg.norm(gram_diff, ord='fro').item()
+
+        wandb.log(logs)
 
     def finish(self):
         wandb.finish()
