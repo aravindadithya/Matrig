@@ -159,7 +159,7 @@ def verify_NFA(net, init_net, trainloader, layer_idx=0, max_batch=10, classes=10
     # print("Shape of grad matrix",G.shape)
     G = sqrt(G.cuda())
     r_val = correlation(M.cuda(), G.cuda())
-    # print("Correlation between Trained CNFM and AGOP: ", r_val)
+    print("Correlation between Trained CNFM and AGOP: ", r_val)
     # print("Final: ", i_val, r_val)
     return {
         'agop_correlation_uncentered': r_val.item()

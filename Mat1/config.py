@@ -61,7 +61,6 @@ def get_untrained_net(
 
 
 def get_config(
-    choice,
     run_id="1",
     project="Balancedness_vs_RFA",
     entity="Matrig100",
@@ -71,13 +70,7 @@ def get_config(
     init_method="arora_balanced",
     init_gain=1.0,
 ):
-    SEED = 9763
-    # Set seeds for reproducibility across all libraries BEFORE creating model
-    torch.manual_seed(SEED)
-    torch.cuda.manual_seed(SEED)
-    torch.cuda.manual_seed_all(SEED)  # For multi-GPU setups
-    random.seed(SEED)
-    np.random.seed(SEED)
+    SEED = 20
 
     net = get_untrained_net(
         hidden_layers=hidden_layers,
@@ -88,7 +81,7 @@ def get_config(
     )
 
     depth = (len(hidden_layers) if hidden_layers is not None else 1) + 1
-    run_name = f"FC_{SEED}_{depth}_{mode}"
+    run_name = f"FC_{SEED}_{depth}_{mode}_{init_method}"
     # Pass seed to loaders for reproducible data splitting and shuffling
     trainloader, valloader, testloader = get_loaders(seed=SEED)
 

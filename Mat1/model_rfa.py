@@ -37,8 +37,7 @@ class Net(nn.Module):
         """
         super(Net, self).__init__()
 
-        if seed is not None:
-            torch.manual_seed(seed)
+        self.seed = seed
 
         self.dim = dim
         self.num_classes = num_classes
@@ -64,20 +63,37 @@ class Net(nn.Module):
         self._initialize_weights()
 
     def _initialize_weights(self):
+        if self.seed is not None:
+            torch.manual_seed(self.seed)
+            torch.cuda.manual_seed_all(self.seed)
         linear_layers = [m for m in self.modules() if isinstance(m, LinearRFA)]
         print(linear_layers)
         if not linear_layers:
             return
 
-        arora_balanced_initialization(
+        if self.init_method == "arora_balanced":
+            arora_balanced_initialization(
                 linear_layers,
                 distribution="normal",
                 mean=0.0,
                 std=self.init_gain,
                 bias_value=0.0,
             )
-        return
-        
+        else:
+            for layer in linear_layers:
+                initialize_linear_layer(
+                    layer,
+                    method=self.init_method,
+                    gain=self.init_gain,
+                    bias_value=0.0,
+                )
+
+        # Initialize the feedback matrices B after forward weights are set.
+        # This ensures forward weight initialization consumes the same RNG sequence 
+        # as the standard model.
+        for layer in linear_layers:
+            nn.init.kaiming_uniform_(layer.B, a=math.sqrt(5))
+
     def forward(self, x):
         x = self.features(x)
         x = self.classifier(x)

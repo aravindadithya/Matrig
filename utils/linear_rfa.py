@@ -1,5 +1,7 @@
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
+from torch.amp import custom_fwd, custom_bwd
 import math
 
 class LinearRFAFunction(torch.autograd.Function):
@@ -8,19 +10,13 @@ class LinearRFAFunction(torch.autograd.Function):
     generate_vmap_rule = True
 
     @staticmethod
-    def setup_context(ctx, inputs, output):
-        input, weight, bias, B = inputs
+    @custom_fwd(device_type='cuda')
+    def forward(ctx, input, weight, bias, B):
         ctx.save_for_backward(input, weight, bias, B)
-        return None
+        return F.linear(input, weight, bias)
 
     @staticmethod
-    def forward(input, weight, bias, B):
-        output = torch.matmul(input, weight.t())
-        if bias is not None:
-            output = output + bias
-        return output
-
-    @staticmethod
+    @custom_bwd(device_type='cuda')
     def backward(ctx, grad_output):
         
         input, weight, bias, B = ctx.saved_tensors
@@ -41,32 +37,19 @@ class LinearRFAFunction(torch.autograd.Function):
 class LinearRFA(nn.Module):
     """Linear layer with Random Feedback Alignment for the backward pass."""
     
-    def __init__(self, in_features, out_features, bias=True):
+    def __init__(self, in_features, out_features, bias=False):
         super(LinearRFA, self).__init__()
         self.in_features = in_features
         self.out_features = out_features
         
-        self.weight = nn.Parameter(torch.Tensor(out_features, in_features))
+        self.weight = nn.Parameter(torch.empty(out_features, in_features))
         if bias:
-            self.bias = nn.Parameter(torch.Tensor(out_features))
+            self.bias = nn.Parameter(torch.empty(out_features))
         else:
             self.register_parameter('bias', None)
             
         # Fixed random feedback matrix
-        self.register_buffer('B', torch.Tensor(out_features, in_features))
-        self.reset_parameters()
-
-    def reset_parameters(self):
-        nn.init.kaiming_uniform_(self.weight, a=math.sqrt(5))
-        nn.init.kaiming_uniform_(self.B, a=math.sqrt(5))
-        #nn.init.xavier_uniform_(self.weight)
-        #nn.init.xavier_uniform_(self.B)
-        
-        if self.bias:
-            fan_in, _ = nn.init._calculate_fan_in_and_fan_out(self.weight)
-            bound = 1 / math.sqrt(fan_in) if fan_in > 0 else 0
-            nn.init.uniform_(self.bias, -bound, bound)
-        
+        self.register_buffer('B', torch.empty(out_features, in_features))
 
     def forward(self, input):
         return LinearRFAFunction.apply(input, self.weight, self.bias, self.B)

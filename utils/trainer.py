@@ -49,8 +49,8 @@ def train_network(config, num_epochs = 5, checkpoint_interval=10):
 
         print("EPOCH: ", i)
         logger.log_matrix_diagnostics(i)
-        logger.log_agop(i)
-        logger.count_sparsity(i)
+        #logger.log_agop(i)
+        #logger.count_sparsity(i)
         
         #Train loss and accuracy are calculated on the fly during backprob for each epoch
         train_loss, train_acc = train_step(net, optimizer, lfn, train_loader, config)

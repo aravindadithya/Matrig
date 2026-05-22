@@ -9,6 +9,7 @@ SUPPORTED_INITIALIZERS = (
     "glorot",
     "arora_balanced",
     "orthogonal",
+    "zeros",
 )
 
 
@@ -107,6 +108,8 @@ def initialize_linear_layer(
         init.xavier_uniform_(layer.weight, gain=gain)
     elif method == "orthogonal":
         init.orthogonal_(layer.weight, gain=gain)
+    elif method == "zeros":
+        init.zeros_(layer.weight)
     else:
         raise ValueError(
             f"Unsupported initialization method '{method}'. "
