@@ -82,6 +82,14 @@ def get_config(
 
     depth = (len(hidden_layers) if hidden_layers is not None else 1) + 1
     run_name = f"FC_{SEED}_{depth}_{mode}_{init_method}"
+
+    # Reset global seeds again before creating loaders. 
+    # Model initialization (especially RFA initializing matrix B) consumes 
+    # the global RNG differently, which drifts the base seed used for DataLoader workers.
+    torch.manual_seed(SEED)
+    if torch.cuda.is_available():
+        torch.cuda.manual_seed_all(SEED)
+
     # Pass seed to loaders for reproducible data splitting and shuffling
     trainloader, valloader, testloader = get_loaders(seed=SEED)
 
