@@ -1,7 +1,7 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from torch.amp import custom_fwd, custom_bwd
+# from torch.amp import custom_fwd, custom_bwd
 import math
 
 class LinearRFAFunction(torch.autograd.Function):
@@ -10,13 +10,13 @@ class LinearRFAFunction(torch.autograd.Function):
     generate_vmap_rule = True
 
     @staticmethod
-    @custom_fwd(device_type='cuda')
+    # @custom_fwd(device_type='cuda')
     def forward(ctx, input, weight, bias, B):
         ctx.save_for_backward(input, weight, bias, B)
         return F.linear(input, weight, bias)
 
     @staticmethod
-    @custom_bwd(device_type='cuda')
+    # @custom_bwd(device_type='cuda')
     def backward(ctx, grad_output):
         
         input, weight, bias, B = ctx.saved_tensors

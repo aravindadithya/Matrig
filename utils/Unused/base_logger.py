@@ -2,7 +2,7 @@ import torch
 import wandb
 import torchvision.utils as vutils
 import torch.nn.functional as F
-from torch.amp import autocast
+# from torch.amp import autocast
 import io
 import os
 import math
@@ -232,8 +232,10 @@ class BaseLogger:
             if outputs_precomputed is not None:
                 outputs = outputs_precomputed
             else:
-                with autocast(device_type='cuda'):
-                    outputs = net(inputs)
+                # with autocast(device_type='cuda'):
+                #     outputs = net(inputs)
+                # outputs = net(inputs)
+                outputs = net(inputs)
 
             probs = F.softmax(outputs, dim=1)
             confidences, preds = torch.max(probs, 1)
@@ -297,8 +299,11 @@ class BaseLogger:
                 hooks.append(layer.register_forward_hook(get_activation(name, layer, handler)))
 
         with torch.no_grad():
+            '''
             with autocast(device_type='cuda'):
                 outputs = net(self.inputs)
+                '''
+            outputs = net(self.inputs)
 
         for h in hooks:
             h.remove()

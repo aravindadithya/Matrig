@@ -3,6 +3,7 @@ import random
 import numpy as np
 import torch
 from torch.optim.lr_scheduler import CosineAnnealingLR
+import random
 import torch.nn as nn
 from torch.utils.data import DataLoader
 import sys
@@ -83,17 +84,21 @@ def get_config(
     depth = (len(hidden_layers) if hidden_layers is not None else 1) + 1
     run_name = f"FC_{SEED}_{depth}_{mode}_{init_method}"
 
-    # Reset global seeds again before creating loaders. 
-    # Model initialization (especially RFA initializing matrix B) consumes 
-    # the global RNG differently, which drifts the base seed used for DataLoader workers.
+    # Exhaustive seed reset to ensure global state is identical before data loading.
+    # This covers cases where library-level initialization (like WandB or ONNX) 
+    # might have touched various random generators.
+    random.seed(SEED)
+    np.random.seed(SEED)
     torch.manual_seed(SEED)
+    torch.cuda.manual_seed(SEED)
+    torch.cuda.manual_seed_all(SEED)
     if torch.cuda.is_available():
         torch.cuda.manual_seed_all(SEED)
 
     # Pass seed to loaders for reproducible data splitting and shuffling
     trainloader, valloader, testloader = get_loaders(seed=SEED)
 
-    optimizer = torch.optim.SGD(net.parameters(), lr=0.01)
+    optimizer = torch.optim.SGD(net.parameters(), lr=0.0001)
     #scheduler = CosineAnnealingWarmRestartsDecay(optimizer, T_0=int(epochs/3)+1, decay=0.8)
     scheduler = None
     lfn = nn.MSELoss()

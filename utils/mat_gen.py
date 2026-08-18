@@ -171,11 +171,13 @@ def get_data_loaders(dataset_dir, batch_size=1024, seed=10000):
     
     test_dataset = TensorDataset(X_test, y_test)
     
+    # Setting num_workers to 0 ensures the data is loaded in the main process
+    # using the exact state of the local generator 'g', bypassing worker seeding drift.
     train_loader = DataLoader(train_subset, batch_size=batch_size, shuffle=True, 
-                             num_workers=4, pin_memory=True, persistent_workers=True, generator=g)
+                             num_workers=0, pin_memory=True, persistent_workers=False, generator=g)
     val_loader = DataLoader(val_subset, batch_size=batch_size, shuffle=False,
-                           num_workers=4, pin_memory=True, persistent_workers=True)
+                           num_workers=0, pin_memory=True, persistent_workers=False)
     test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False,
-                            num_workers=4, pin_memory=True, persistent_workers=True)
+                            num_workers=0, pin_memory=True, persistent_workers=False)
     
     return train_loader, val_loader, test_loader

@@ -3,16 +3,17 @@ import torch
 import wandb
 import time
 import os
-from torch.amp import autocast
+# from torch.amp import autocast
 import torch.nn.functional as F
 from utils.base_logger import BaseLogger
-scaler = torch.amp.GradScaler('cuda')
+# scaler = torch.amp.GradScaler('cuda')
 fn_data = {}
 
 
 def train_network(config, num_epochs = 5, checkpoint_interval=10):
 
-    torch.set_float32_matmul_precision('high')
+    # Force full FP32 for bit-perfect parity between native and custom layers
+    torch.set_float32_matmul_precision('highest')
 
     # For full reproducibility
     torch.backends.cudnn.deterministic = True
@@ -51,17 +52,17 @@ def train_network(config, num_epochs = 5, checkpoint_interval=10):
         logger.log_matrix_diagnostics(i)
         #logger.log_agop(i)
         #logger.count_sparsity(i)
-        
-        #Train loss and accuracy are calculated on the fly during backprob for each epoch
+
+        train_loss_full, train_acc_full , train_preds, train_targets= val_step(net, train_loader, config, lfn)
+        val_loss, val_acc, val_preds, val_targets = val_step(net, val_loader, config, lfn)
+
         train_loss, train_acc = train_step(net, optimizer, lfn, train_loader, config)
         # Validation loss and accuracy are calculated after backprob for each epoch
-        val_loss, val_acc, val_preds, val_targets = val_step(net, val_loader, config, lfn)       
-
         
         log_data = {
             "epoch": i,
-            "train/accuracy": train_acc,
-            "train/loss": train_loss,
+            "train/accuracy": train_acc_full,
+            "train/loss": train_loss_full,
             "val/accuracy": val_acc,
             "val/loss": val_loss,
             "learning_rate": optimizer.param_groups[0]['lr'],
@@ -130,7 +131,7 @@ def train_network(config, num_epochs = 5, checkpoint_interval=10):
 
 
 def train_step(net, optimizer, lfn, train_loader, config):
-    global scaler
+    # global scaler
     net.train()
     start = time.time()
     # Accumulate on GPU to avoid CPU-GPU sync in the loop
@@ -146,21 +147,29 @@ def train_step(net, optimizer, lfn, train_loader, config):
         inputs, labels = batch
         targets = labels
         
+        '''
         # Optimization: Channels Last for inputs matches the model layout
         if inputs.dim() == 4:
             inputs = inputs.to(device='cuda', memory_format=memory_format, non_blocking=True)
         else:
             inputs = inputs.to(device='cuda', non_blocking=True)
+        '''
+
+        inputs = inputs.to(device='cuda', non_blocking=True)
         target = targets.cuda(non_blocking=True)
 
-        with autocast(device_type='cuda'):
-            output = net(inputs)
-            loss = lfn(output, target)
+        # with autocast(device_type='cuda'):
+        #     output = net(inputs)
+        #     loss = lfn(output, target)
+        output = net(inputs)
+        loss = lfn(output, target)
         
-        scaler.scale(loss).backward()  
+        # scaler.scale(loss).backward()  
+        loss.backward()
         
-        scaler.step(optimizer)    
-        scaler.update() 
+        # scaler.step(optimizer)    
+        # scaler.update() 
+        optimizer.step()
 
         train_loss_accum += loss.detach() * inputs.size(0)
         # Note: loss.item() triggers a CPU-GPU sync
@@ -183,7 +192,7 @@ def train_step(net, optimizer, lfn, train_loader, config):
 
 
 def val_step(net, val_loader, config, lfn=None):
-    global scaler
+    # global scaler
     net.eval()
     val_loss_accum = torch.tensor(0.0, device='cuda')
     correct_accum = torch.tensor(0.0, device='cuda')
@@ -203,11 +212,15 @@ def val_step(net, val_loader, config, lfn=None):
         target = targets.cuda(non_blocking=True)
 
         with torch.no_grad():
-            with autocast(device_type='cuda'): 
-                output = net(inputs)
-                if lfn:
-                    loss = lfn(output, target)
-                    val_loss_accum += loss.detach() * inputs.size(0)
+            # with autocast(device_type='cuda'): 
+            #     output = net(inputs)
+            #     if lfn:
+            #         loss = lfn(output, target)
+            #         val_loss_accum += loss.detach() * inputs.size(0)
+            output = net(inputs)
+            if lfn:
+                loss = lfn(output, target)
+                val_loss_accum += loss.detach() * inputs.size(0)
 
             _, predicted = torch.max(output.data, 1)
             total += target.size(0)
