@@ -14,7 +14,7 @@ SUPPORTED_INITIALIZERS = (
 
 
 def arora_balanced_initialization(
-    layers: list[nn.Linear],
+    layers,  # list of nn.Linear or LinearRFA layers
     distribution: str = "normal",
     mean: float = 0.0,
     std: float = 1.0,
@@ -31,6 +31,13 @@ def arora_balanced_initialization(
 
     The base matrix A is drawn from the specified distribution. For gaussian (normal),
     mean and std can be set to match paper perturbation settings.
+    
+    Args:
+        layers: List of nn.Linear or LinearRFA layers with .weight, .bias, .in_features, .out_features
+        distribution: "normal" or "uniform"
+        mean: Mean for normal distribution
+        std: Standard deviation for normal distribution
+        bias_value: Value to initialize bias to
     """
     if len(layers) == 0:
         return

@@ -228,7 +228,7 @@ class BaseLogger:
             product_matrix = self._compute_product_matrix([w.detach() for w in linear_weights])
             if target_matrix is not None:
                 if product_matrix.shape == target_matrix.shape:
-                    logs["matrix_product/||product - target||_F"] = torch.linalg.norm(
+                    logs["Error_Matrix_Norm"] = torch.linalg.norm(
                         product_matrix - target_matrix, ord='fro'
                     ).item()
                 else:
@@ -245,9 +245,20 @@ class BaseLogger:
                 gram_right = wi1.T @ wi1
                 gram_diff = gram_left - gram_right
 
-                logs[f"balance/||W{i}W{i}T||_F"] = torch.linalg.norm(gram_left, ord='fro').item()
-                logs[f"balance/||W{i+1}TW{i+1}||_F"] = torch.linalg.norm(gram_right, ord='fro').item()
-                logs[f"balance/||W{i}W{i}^T - W{i+1}^TW{i+1}||_F"] = torch.linalg.norm(gram_diff, ord='fro').item()
+                # Compute individual Frobenius norms
+                norm_gram_left = torch.linalg.norm(gram_left, ord='fro')
+                norm_gram_right = torch.linalg.norm(gram_right, ord='fro')
+                norm_gram_diff = torch.linalg.norm(gram_diff, ord='fro')
+
+                logs[f"balance/||W{i}W{i}T||_F"] = norm_gram_left.item()
+                logs[f"balance/||W{i+1}TW{i+1}||_F"] = norm_gram_right.item()
+                logs[f"balance/||W{i}W{i}^T - W{i+1}^TW{i+1}||_F"] = norm_gram_diff.item()
+                
+                # Compute balancedness metric: B_i(t) = ||gram_diff||_F / (||gram_left||_F + ||gram_right||_F)
+                denominator = norm_gram_left + norm_gram_right
+                if denominator > 1e-8:
+                    balancedness = norm_gram_diff / denominator
+                    logs[f"balancedness/B{i}"] = balancedness.item()
 
         wandb.log(logs)
 

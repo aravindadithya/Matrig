@@ -13,6 +13,7 @@ from utils.mat_gen import get_data_loaders
 
 # Import models from current directory
 from . import model
+from . import model_dfa
 from . import model_rfa
 
 
@@ -49,6 +50,15 @@ def get_untrained_net(
             init_method=init_method,
             init_gain=init_gain,
         )
+    elif mode == "dfa":
+        net = model_dfa.Net(
+            28 * 28,
+            num_classes=output_dim,
+            hidden_layers=hidden_layers,
+            seed=SEED,
+            init_method=init_method,
+            init_gain=init_gain,
+        )
     else:
         net = model.Net(
             28 * 28,
@@ -63,8 +73,8 @@ def get_untrained_net(
 
 def get_config(
     run_id="1",
-    project="Balancedness_vs_RFA",
-    entity="Matrig100",
+    project="2_layer_fc_balancedness",
+    entity="ICLR_2027",
     run_name="FC",
     mode="rfa",
     hidden_layers=None,
@@ -98,7 +108,7 @@ def get_config(
     # Pass seed to loaders for reproducible data splitting and shuffling
     trainloader, valloader, testloader = get_loaders(seed=SEED)
 
-    optimizer = torch.optim.SGD(net.parameters(), lr=0.0001)
+    optimizer = torch.optim.SGD(net.parameters(), lr=0.001)
     #scheduler = CosineAnnealingWarmRestartsDecay(optimizer, T_0=int(epochs/3)+1, decay=0.8)
     scheduler = None
     lfn = nn.MSELoss()
