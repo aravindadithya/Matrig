@@ -73,15 +73,19 @@ def get_untrained_net(
 
 def get_config(
     run_id="1",
-    project="2_layer_fc_balancedness",
+    project="4_layer_fc_balancedness",
     entity="ICLR_2027",
     run_name="FC",
     mode="rfa",
     hidden_layers=None,
+    width=None,
     init_method="arora_balanced",
     init_gain=1.0,
+    SEED=1000,
 ):
-    SEED = 20
+
+    if width is not None:
+        hidden_layers = [width] * 3
 
     net = get_untrained_net(
         hidden_layers=hidden_layers,
@@ -114,7 +118,7 @@ def get_config(
     lfn = nn.MSELoss()
 
     config_dir = os.path.dirname(os.path.abspath(__file__))
-    target_matrix_path = os.path.join(config_dir, 'random_matrix_784x784.hkl')
+    target_matrix_path = os.path.join(config_dir, 'random_matrix_784x784_signed.hkl')
 
     config = {
         "project": f"{project}",
@@ -131,11 +135,8 @@ def get_config(
         "weight_decay": optimizer.param_groups[0].get('weight_decay', 0),
         "scheduler_name": type(scheduler).__name__ if scheduler else "None",
         "task_type": "regression",
-        "output_dim": 28 * 28,
-        "max_images": 32,
-        "rotate_inputs": False,
-        # Use 'channels_last' for potential performance boost with 4D tensors (e.g. CNNs)
-        "memory_format": "channels_last",
+        "width": width if width is not None else hidden_layers[0] if hidden_layers else None,
+        "hidden_layers": hidden_layers,
         "net": net,
         "train_loader": trainloader,
         "val_loader": valloader,

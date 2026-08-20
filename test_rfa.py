@@ -11,8 +11,8 @@ import sys
 import os
 
 sys.path.insert(0, os.path.dirname(__file__))
-from utils.linear_rfa import LinearRFA
-from utils.linear_dfa import LinearDFA
+from utils.layers.linear_rfa import LinearRFA
+from utils.layers.linear_dfa import LinearDFA
 
 
 def test_rfa_forward_backward():
@@ -68,8 +68,10 @@ def test_dfa_forward_backward():
     dfa_layer = LinearDFA(in_features, out_features, bias=True).to(device)
 
     assert dfa_layer.B is not None, "DFA feedback matrix not initialized"
-    assert dfa_layer.B.shape == (out_features, in_features), f"DFA B shape mismatch: {dfa_layer.B.shape}"
+    assert dfa_layer.B.shape == (out_features, out_features), f"DFA B shape mismatch: {dfa_layer.B.shape}"
+    assert dfa_layer.R.shape == (out_features, in_features), f"DFA R shape mismatch: {dfa_layer.R.shape}"
     print(f"✓ DFA B matrix initialized with shape {dfa_layer.B.shape}")
+    print(f"✓ DFA R matrix initialized with shape {dfa_layer.R.shape}")
 
     x = torch.randn(batch_size, in_features, requires_grad=True, device=device)
     global_error = torch.randn(batch_size, out_features, device=device, requires_grad=False)

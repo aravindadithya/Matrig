@@ -19,7 +19,7 @@ from torch.linalg import norm, svd
 from torchvision import models
 from torch.linalg import norm, eig
 
-from utils.linear_rfa import LinearRFA
+from utils.layers.linear_rfa import LinearRFA
 
 
 def get_jacobian(net, data, c_idx=0, chunk=100):

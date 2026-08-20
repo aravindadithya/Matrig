@@ -28,8 +28,7 @@ def train_network(config, num_epochs = 5, checkpoint_interval=10):
     test_loader = config['test_loader']
 
     net.cuda()
-    # This is supposed to improve performance but I found mixed results 
-    # with diminishing returns
+
     #net = torch.compile(net)
 
     print("Initializing Wandb:")
@@ -50,6 +49,7 @@ def train_network(config, num_epochs = 5, checkpoint_interval=10):
 
         print("EPOCH: ", i)
         logger.log_matrix_diagnostics(i)
+        logger.log_singular_values(i)
         #logger.log_agop(i)
         #logger.count_sparsity(i)
 

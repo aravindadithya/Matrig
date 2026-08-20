@@ -72,9 +72,9 @@ class Net(nn.Module):
         if self.init_method == "arora_balanced":
             arora_balanced_initialization(
                 linear_layers,
-                distribution="normal",
+                distribution="uniform",
                 mean=0.0,
-                std=self.init_gain,
+                std=0.01 ** len(linear_layers),
                 bias_value=0.0,
             )
         else:

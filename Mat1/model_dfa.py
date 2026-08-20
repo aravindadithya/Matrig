@@ -7,7 +7,7 @@ import torch.nn as nn
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 from utils.initializer import initialize_linear_layer, arora_balanced_initialization
-from utils.linear_dfa import LinearDFA
+from utils.layers.linear_dfa import LinearDFA
 
 
 class DFASequential(nn.Module):
@@ -16,8 +16,14 @@ class DFASequential(nn.Module):
         self.layers = nn.ModuleList(layers)
 
     def forward(self, x, task_signal=None):
+        if task_signal is None:
+            for layer in self.layers:
+                x = layer(x)
+            return x
+
         for layer in self.layers:
-            x = layer(x, task_signal=task_signal)
+            layer_task = task_signal @ layer.B.to(task_signal.device, task_signal.dtype)
+            x = layer(x, task_signal=layer_task)
         return x
 
 
@@ -54,6 +60,7 @@ class Net(nn.Module):
 
         self.features = DFASequential(layers)
         self.classifier = LinearDFA(prev_dim, num_classes, num_classes=num_classes, bias=bias)
+        self.classifier.B.data.copy_(torch.eye(num_classes, device=self.classifier.B.device, dtype=self.classifier.B.dtype))
         self._initialize_weights()
 
     def _initialize_weights(self):
@@ -68,9 +75,9 @@ class Net(nn.Module):
         if self.init_method == "arora_balanced":
             arora_balanced_initialization(
                 linear_layers,
-                distribution="normal",
+                distribution="uniform",
                 mean=0.0,
-                std=self.init_gain,
+                std=0.01 ** len(linear_layers),
                 bias_value=0.0,
             )
         else:
@@ -83,7 +90,10 @@ class Net(nn.Module):
                 )
 
         for layer in linear_layers:
-            nn.init.kaiming_uniform_(layer.B, a=math.sqrt(5))
+            # nn.init.kaiming_uniform_(layer.B, a=math.sqrt(5))
+            # nn.init.kaiming_uniform_(layer.R, a=math.sqrt(5))
+            nn.init.uniform_(layer.B, -0.01, 0.01)
+            nn.init.uniform_(layer.R, -0.01, 0.01)
 
     def forward(self, x, task_signal=None):
         if task_signal is None:

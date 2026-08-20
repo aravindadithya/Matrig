@@ -10,7 +10,7 @@ from torch.utils.data import TensorDataset, DataLoader
 import hickle as hkl
 
 
-def generate_random_matrix(n, mean=0.0, std=1.0, seed=None):
+def generate_random_matrix(n, mean=0.0, std=1.0, seed=None, distribution="normal"):
     """
     Generate an n*n matrix with entries randomly sampled from normal distribution.
     
@@ -19,15 +19,18 @@ def generate_random_matrix(n, mean=0.0, std=1.0, seed=None):
         mean: Mean of the normal distribution (default: 0.0)
         std: Standard deviation of the normal distribution (default: 1.0)
         seed: Random seed for reproducibility (default: None)
+        distribution: "normal" or "signed". Signed entries are sampled
+            uniformly from {-1, 1}.
     
     Returns:
         numpy array of shape (n, n)
     """
-    if seed is not None:
-        np.random.seed(seed)
-    
-    matrix = np.random.normal(loc=mean, scale=std, size=(n, n))
-    return matrix
+    rng = np.random.default_rng(seed)
+    if distribution == "normal":
+        return rng.normal(loc=mean, scale=std, size=(n, n))
+    if distribution == "signed":
+        return rng.choice(np.array([-1, 1]), size=(n, n))
+    raise ValueError(f"Unsupported matrix distribution: {distribution}")
 
 
 def save_matrix(matrix, filepath):
@@ -73,8 +76,7 @@ def generate_dataset(num_train_samples=60000, num_test_samples=10000,
     Returns:
         Tuple of (X_train, y_train, X_test, y_test, matrix) as numpy arrays
     """
-    if seed is not None:
-        np.random.seed(seed)
+    rng = np.random.default_rng(seed)
 
     if matrix is None:
         matrix = generate_random_matrix(input_dim, seed=seed).astype(np.float32)
@@ -83,9 +85,9 @@ def generate_dataset(num_train_samples=60000, num_test_samples=10000,
         if matrix.shape != (input_dim, input_dim):
             raise ValueError(f"Expected matrix shape {(input_dim, input_dim)}, got {matrix.shape}")
     
-    # Generate random input vectors
-    X_train = np.random.randn(num_train_samples, input_dim).astype(np.float32)
-    X_test = np.random.randn(num_test_samples, input_dim).astype(np.float32)
+    # Inputs are drawn from N(0, I): independent standard-normal coordinates.
+    X_train = rng.normal(0.0, 1.0, size=(num_train_samples, input_dim)).astype(np.float32)
+    X_test = rng.normal(0.0, 1.0, size=(num_test_samples, input_dim)).astype(np.float32)
 
     # Regression targets: y = Mx
     y_train = X_train @ matrix.T
@@ -160,6 +162,9 @@ def get_data_loaders(dataset_dir, batch_size=1024, seed=10000):
     # Split training data into train and validation
     train_size = int(0.8 * len(X_train))
     val_size = len(X_train) - train_size
+
+    if train_size + val_size != len(X_train):
+        raise RuntimeError("Train/validation split does not cover all training samples")
     
     train_dataset = TensorDataset(X_train, y_train)
     

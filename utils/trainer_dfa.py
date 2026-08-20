@@ -1,9 +1,7 @@
-import os
 import time
 
 import torch
 import wandb
-import torch.nn.functional as F
 
 from utils.base_logger import BaseLogger
 
@@ -30,8 +28,6 @@ def train_step_dfa(net, optimizer, lfn, train_loader, config):
     train_loss_accum = torch.tensor(0.0, device=device)
     correct_accum = torch.tensor(0.0, device=device)
     total = 0
-    non_critical = os.getenv('NON_CRITICAL_LOGS', 'False').lower() in ('true', '1', 't')
-
     for batch_idx, batch in enumerate(train_loader):
         optimizer.zero_grad(set_to_none=True)
         inputs, labels = batch
@@ -39,7 +35,6 @@ def train_step_dfa(net, optimizer, lfn, train_loader, config):
         inputs = inputs.to(device=device, non_blocking=True)
         target = labels.to(device=device, non_blocking=True)
 
-        # Build the global output error first; this is the DFA signal used for all layers.
         with torch.enable_grad():
             proxy_output = net(inputs)
             proxy_loss = lfn(proxy_output, target)
@@ -52,9 +47,6 @@ def train_step_dfa(net, optimizer, lfn, train_loader, config):
         optimizer.step()
 
         train_loss_accum += loss.detach() * inputs.size(0)
-
-        if batch_idx % 10 == 0 and non_critical:
-            wandb.log({"Batch/loss": loss.item()})
 
         _, predicted = torch.max(output.data, 1)
         total += target.size(0)
@@ -144,6 +136,7 @@ def train_network_dfa(config, num_epochs=5, checkpoint_interval=10):
     for i in range(start_epoch, start_epoch + num_epochs):
         print("EPOCH: ", i)
         logger.log_matrix_diagnostics(i)
+        logger.log_singular_values(i)
 
         train_loss_full, train_acc_full, train_preds, train_targets = val_step_dfa(net, train_loader, config, lfn)
         val_loss, val_acc, val_preds, val_targets = val_step_dfa(net, val_loader, config, lfn)
@@ -191,7 +184,7 @@ def train_network_dfa(config, num_epochs=5, checkpoint_interval=10):
                 }, f)
             wandb.log_artifact(artifact)
 
-        wandb.log(log_data)
+            wandb.log(log_data)
 
     if best_state_dict:
         artifact = wandb.Artifact(f"model-{config['run_id']}", type='model', metadata={"best_val_acc": best_val_acc})

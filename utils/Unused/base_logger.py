@@ -9,7 +9,7 @@ import math
 import hickle as hkl
 from utils.Unused.cnn_logger import CNNLogger
 from utils.agop_fc import verify_NFA
-from utils.linear_rfa import LinearRFA
+from utils.layers.linear_rfa import LinearRFA
 
 
 class BaseLogger:
