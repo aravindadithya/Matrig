@@ -74,7 +74,7 @@ class Net(nn.Module):
                 linear_layers,
                 distribution="uniform",
                 mean=0.0,
-                std=0.01 ** len(linear_layers),
+                std=1.0,
                 bias_value=0.0,
             )
         else:

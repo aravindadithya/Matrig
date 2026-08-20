@@ -96,7 +96,8 @@ def get_config(
     )
 
     depth = (len(hidden_layers) if hidden_layers is not None else 1) + 1
-    run_name = f"FC_{SEED}_{depth}_{mode}_{init_method}"
+    width_str = width if width is not None else (hidden_layers[0] if hidden_layers else "none")
+    run_name = f"FC_{SEED}_{depth}_{width_str}_{mode}_{init_method}"
 
     # Exhaustive seed reset to ensure global state is identical before data loading.
     # This covers cases where library-level initialization (like WandB or ONNX) 
@@ -112,7 +113,7 @@ def get_config(
     # Pass seed to loaders for reproducible data splitting and shuffling
     trainloader, valloader, testloader = get_loaders(seed=SEED)
 
-    optimizer = torch.optim.SGD(net.parameters(), lr=0.001)
+    optimizer = torch.optim.SGD(net.parameters(), lr=0.01)
     #scheduler = CosineAnnealingWarmRestartsDecay(optimizer, T_0=int(epochs/3)+1, decay=0.8)
     scheduler = None
     lfn = nn.MSELoss()
