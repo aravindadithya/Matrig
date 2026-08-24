@@ -72,20 +72,20 @@ def get_untrained_net(
 
 
 def get_config(
+    hidden_layers,
     run_id="1",
     project="4_layer_fc_balancedness",
     entity="ICLR_2027",
     run_name="FC",
-    mode="rfa",
-    hidden_layers=None,
-    width=None,
+    mode="rfa",  
     init_method="arora_balanced",
     init_gain=1.0,
     SEED=1000,
 ):
 
-    if width is not None:
-        hidden_layers = [width] * 3
+    
+    depth = len(hidden_layers)
+    width = hidden_layers[0]
 
     net = get_untrained_net(
         hidden_layers=hidden_layers,
@@ -96,8 +96,7 @@ def get_config(
     )
 
     depth = (len(hidden_layers) if hidden_layers is not None else 1) + 1
-    width_str = width if width is not None else (hidden_layers[0] if hidden_layers else "none")
-    run_name = f"FC_{SEED}_{depth}_{width_str}_{mode}_{init_method}"
+    run_name = f"FC_{SEED}_{depth}_{width}_{mode}_{init_method}"
 
     # Exhaustive seed reset to ensure global state is identical before data loading.
     # This covers cases where library-level initialization (like WandB or ONNX) 
@@ -113,7 +112,7 @@ def get_config(
     # Pass seed to loaders for reproducible data splitting and shuffling
     trainloader, valloader, testloader = get_loaders(seed=SEED)
 
-    optimizer = torch.optim.SGD(net.parameters(), lr=0.01)
+    optimizer = torch.optim.Adam(net.parameters(), lr=0.01)
     #scheduler = CosineAnnealingWarmRestartsDecay(optimizer, T_0=int(epochs/3)+1, decay=0.8)
     scheduler = None
     lfn = nn.MSELoss()
@@ -136,7 +135,6 @@ def get_config(
         "weight_decay": optimizer.param_groups[0].get('weight_decay', 0),
         "scheduler_name": type(scheduler).__name__ if scheduler else "None",
         "task_type": "regression",
-        "width": width if width is not None else hidden_layers[0] if hidden_layers else None,
         "hidden_layers": hidden_layers,
         "net": net,
         "train_loader": trainloader,

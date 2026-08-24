@@ -59,7 +59,7 @@ class BaseLogger:
         exclude_keys = ['net', 'train_loader', 'val_loader', 'test_loader', 'optimizer', 'lfn', 'scheduler']
         wandb_config = {k: v for k, v in config.items() if k not in exclude_keys}
 
-        wandb.init(project=config['project'], name=config['run_name'], resume="allow", id=config['run_id'], config=wandb_config, entity=config['entity'])
+        wandb.init(project=config['project'], name=config['run_name'], resume="never", id=config['run_id'], config=wandb_config, entity=config['entity'])
 
         # Define 'epoch' as the step metric for all epoch-level logs
         wandb.define_metric("epoch")
@@ -265,7 +265,7 @@ class BaseLogger:
 
         wandb.log(logs)
 
-    def log_singular_values(self, epoch, top_k=5):
+    def log_singular_values(self, epoch, top_k=3):
         """Log the largest singular values of each forward weight matrix."""
         linear_weights = [
             module.weight for module in self.net.modules()

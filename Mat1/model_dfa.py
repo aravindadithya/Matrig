@@ -10,23 +10,6 @@ from utils.initializer import initialize_linear_layer, arora_balanced_initializa
 from utils.layers.linear_dfa import LinearDFA
 
 
-class DFASequential(nn.Module):
-    def __init__(self, layers):
-        super().__init__()
-        self.layers = nn.ModuleList(layers)
-
-    def forward(self, x, task_signal=None):
-        if task_signal is None:
-            for layer in self.layers:
-                x = layer(x)
-            return x
-
-        for layer in self.layers:
-            layer_task = task_signal @ layer.B.to(task_signal.device, task_signal.dtype)
-            x = layer(x, task_signal=layer_task)
-        return x
-
-
 class Net(nn.Module):
     def __init__(
         self,
@@ -58,9 +41,14 @@ class Net(nn.Module):
             layers.append(LinearDFA(prev_dim, hidden_dim, num_classes=num_classes, bias=bias))
             prev_dim = hidden_dim
 
-        self.features = DFASequential(layers)
-        self.classifier = LinearDFA(prev_dim, num_classes, num_classes=num_classes, bias=bias)
-        self.classifier.B.data.copy_(torch.eye(num_classes, device=self.classifier.B.device, dtype=self.classifier.B.dtype))
+        self.features = nn.Sequential(*layers)
+        self.classifier = LinearDFA(
+            prev_dim,
+            num_classes,
+            num_classes=num_classes,
+            bias=bias,
+            is_classifier_layer=True,
+        )
         self._initialize_weights()
 
     def _initialize_weights(self):
@@ -90,16 +78,19 @@ class Net(nn.Module):
                 )
 
         for layer in linear_layers:
-            # nn.init.kaiming_uniform_(layer.B, a=math.sqrt(5))
-            # nn.init.kaiming_uniform_(layer.R, a=math.sqrt(5))
-            nn.init.uniform_(layer.B, -0.01, 0.01)
-            nn.init.uniform_(layer.R, -0.01, 0.01)
+            # Keep classifier feedback unconstrained; random feedback elsewhere.
+            if layer.is_classifier_layer:
+                layer.B.fill_(1.0)
+            else:
+                # nn.init.kaiming_uniform_(layer.B, a=math.sqrt(5))
+                # nn.init.kaiming_uniform_(layer.R, a=math.sqrt(5))
+                nn.init.uniform_(layer.B, -0.01, 0.01)
 
-    def forward(self, x, task_signal=None):
-        if task_signal is None:
-            x = self.features(x)
-            x = self.classifier(x)
-            return x
-        x = self.features(x, task_signal=task_signal)
-        x = self.classifier(x, task_signal=task_signal)
+    def forward(self, x, global_error=None):
+        for layer in self.features:
+            if isinstance(layer, LinearDFA):
+                x = layer(x, global_error=global_error)
+            else:
+                x = layer(x)
+        x = self.classifier(x, global_error=global_error)
         return x
