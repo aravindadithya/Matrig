@@ -7,6 +7,7 @@ import torch.nn as nn
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 from utils.initializer import initialize_linear_layer, arora_balanced_initialization
+from utils.layers.linear_dfa import LinearDFA
 
 
 class Net(nn.Module):
@@ -20,24 +21,9 @@ class Net(nn.Module):
         init_method="arora_balanced",
         init_gain=1.0,
     ):
-        """
-        Fully connected neural network with configurable hidden layers.
-
-        Args:
-            dim: Input dimension
-            num_classes: Number of output classes
-            hidden_layers: List of hidden layer sizes (default: None means single hidden layer of 1024)
-                          Example: [1024, 512, 256] creates 3 hidden layers
-            bias: Whether to use bias in linear layers (default: False)
-            seed: Random seed for weight initialization (default: None)
-            init_method: Weight initialization method
-                         (kaiming, he, glorot, arora_balanced, orthogonal)
-            init_gain: Gain/scaling factor for initialization
-        """
         super(Net, self).__init__()
 
         self.seed = seed
-
         self.dim = dim
         self.num_classes = num_classes
         self.bias = bias
@@ -51,21 +37,26 @@ class Net(nn.Module):
 
         layers = []
         prev_dim = dim
-
         for hidden_dim in hidden_layers:
-            layers.append(nn.Linear(prev_dim, hidden_dim, bias=bias))
+            layers.append(LinearDFA(prev_dim, hidden_dim, num_classes=num_classes, bias=bias))
             prev_dim = hidden_dim
 
-        self.features = nn.Sequential(*layers)
-        self.classifier = nn.Linear(prev_dim, num_classes, bias=bias)
+        self.features = nn.ModuleList(layers)
+        self.classifier = LinearDFA(
+            prev_dim,
+            num_classes,
+            num_classes=num_classes,
+            bias=bias,
+            is_classifier_layer=True,
+        )
         self._initialize_weights()
 
     def _initialize_weights(self):
         if self.seed is not None:
             torch.manual_seed(self.seed)
             torch.cuda.manual_seed_all(self.seed)
-        linear_layers = [m for m in self.modules() if isinstance(m, nn.Linear)]
-        print(linear_layers)
+
+        linear_layers = [m for m in self.modules() if isinstance(m, LinearDFA)]
         if not linear_layers:
             return
 
@@ -74,7 +65,7 @@ class Net(nn.Module):
                 linear_layers,
                 distribution="uniform",
                 mean=0.0,
-                std=1.0,
+                std= 1.0,
                 bias_value=0.0,
             )
         else:
@@ -86,7 +77,20 @@ class Net(nn.Module):
                     bias_value=0.0,
                 )
 
-    def forward(self, x):
-        x = self.features(x)
-        x = self.classifier(x)
+        for layer in linear_layers:
+            # Keep classifier feedback unconstrained; random feedback elsewhere.
+            if layer.is_classifier_layer:
+                layer.B.fill_(1.0)
+            else:
+                # nn.init.kaiming_uniform_(layer.B, a=math.sqrt(5))
+                # nn.init.kaiming_uniform_(layer.R, a=math.sqrt(5))
+                nn.init.uniform_(layer.B, -0.1, 0.1)
+
+    def forward(self, x, global_error=None):
+        for layer in self.features:
+            if isinstance(layer, LinearDFA):
+                x = layer(x, global_error=global_error)
+            else:
+                x = layer(x)
+        x = self.classifier(x, global_error=global_error)
         return x

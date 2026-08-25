@@ -2,14 +2,15 @@ import torch
 import wandb
 import torchvision.utils as vutils
 import torch.nn.functional as F
-from torch.amp import autocast
+# from torch.amp import autocast
 import io
 import os
 import math
 import hickle as hkl
 from utils.Unused.cnn_logger import CNNLogger
 from utils.agop_fc import verify_NFA
-from utils.linear_rfa import LinearRFA
+from utils.layers.linear_rfa import LinearRFA
+from utils.layers.linear_dfa import LinearDFA
 
 
 class BaseLogger:
@@ -58,7 +59,7 @@ class BaseLogger:
         exclude_keys = ['net', 'train_loader', 'val_loader', 'test_loader', 'optimizer', 'lfn', 'scheduler']
         wandb_config = {k: v for k, v in config.items() if k not in exclude_keys}
 
-        wandb.init(project=config['project'], name=config['run_name'], resume="allow", id=config['run_id'], config=wandb_config, entity=config['entity'])
+        wandb.init(project=config['project'], name=config['run_name'], resume="never", id=config['run_id'], config=wandb_config, entity=config['entity'])
 
         # Define 'epoch' as the step metric for all epoch-level logs
         wandb.define_metric("epoch")
@@ -75,6 +76,8 @@ class BaseLogger:
             ]
         wandb.define_metric("adjacent_balance/*", step_metric="epoch")
         wandb.define_metric("matrix_product/*", step_metric="epoch")
+        wandb.define_metric("balance/*", step_metric="epoch")
+        wandb.define_metric("balancedness/*", step_metric="epoch")
         wandb.define_metric("agop/*", step_metric="epoch")
         for metric in metrics_to_sync:
             wandb.define_metric(metric, step_metric="epoch")
@@ -215,7 +218,7 @@ class BaseLogger:
     def log_matrix_diagnostics(self, epoch):
         """Log matrix diagnostics for the network."""
         linear_weights = [ m.weight for m in self.net.modules() if 
-            isinstance(m, (torch.nn.Linear, LinearRFA))
+            isinstance(m, (torch.nn.Linear, LinearRFA, LinearDFA))
         ]
 
         if not linear_weights:
@@ -228,7 +231,7 @@ class BaseLogger:
             product_matrix = self._compute_product_matrix([w.detach() for w in linear_weights])
             if target_matrix is not None:
                 if product_matrix.shape == target_matrix.shape:
-                    logs["matrix_product/||product - target||_F"] = torch.linalg.norm(
+                    logs["Error_Matrix_Norm"] = torch.linalg.norm(
                         product_matrix - target_matrix, ord='fro'
                     ).item()
                 else:
@@ -245,9 +248,39 @@ class BaseLogger:
                 gram_right = wi1.T @ wi1
                 gram_diff = gram_left - gram_right
 
-                logs[f"balance/||W{i}W{i}T||_F"] = torch.linalg.norm(gram_left, ord='fro').item()
-                logs[f"balance/||W{i+1}TW{i+1}||_F"] = torch.linalg.norm(gram_right, ord='fro').item()
-                logs[f"balance/||W{i}W{i}^T - W{i+1}^TW{i+1}||_F"] = torch.linalg.norm(gram_diff, ord='fro').item()
+                # Compute individual Frobenius norms
+                norm_gram_left = torch.linalg.norm(gram_left, ord='fro')
+                norm_gram_right = torch.linalg.norm(gram_right, ord='fro')
+                norm_gram_diff = torch.linalg.norm(gram_diff, ord='fro')
+
+                logs[f"balancedness/||W{i}W{i}T||_F"] = norm_gram_left.item()
+                logs[f"balancedness/||W{i+1}TW{i+1}||_F"] = norm_gram_right.item()
+                logs[f"balancedness/||W{i}W{i}^T - W{i+1}^TW{i+1}||_F"] = norm_gram_diff.item()
+                
+                # Compute balancedness metric: B_i(t) = ||gram_diff||_F / (||gram_left||_F + ||gram_right||_F)
+                denominator = norm_gram_left + norm_gram_right
+                if denominator > 1e-8:
+                    balancedness = norm_gram_diff / denominator
+                    logs[f"balancedness/B{i}"] = balancedness.item()
+
+        wandb.log(logs)
+
+    def log_singular_values(self, epoch, top_k=3):
+        """Log the largest singular values of each forward weight matrix."""
+        linear_weights = [
+            module.weight for module in self.net.modules()
+            if isinstance(module, (torch.nn.Linear, LinearRFA, LinearDFA))
+        ]
+
+        if not linear_weights:
+            return
+
+        logs = {"epoch": epoch}
+        with torch.no_grad():
+            for layer_idx, weight in enumerate(linear_weights):
+                singular_values = torch.linalg.svdvals(weight.detach())[:top_k]
+                for value_idx, value in enumerate(singular_values):
+                    logs[f"singular_values/layer_{layer_idx}/top_{value_idx + 1}"] = value.item()
 
         wandb.log(logs)
 

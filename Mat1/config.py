@@ -3,6 +3,7 @@ import random
 import numpy as np
 import torch
 from torch.optim.lr_scheduler import CosineAnnealingLR
+import random
 import torch.nn as nn
 from torch.utils.data import DataLoader
 import sys
@@ -12,6 +13,7 @@ from utils.mat_gen import get_data_loaders
 
 # Import models from current directory
 from . import model
+from . import model_dfa
 from . import model_rfa
 
 
@@ -31,17 +33,27 @@ def get_loaders(batch_size=128, seed=10000):
 
 def get_untrained_net(
     hidden_layers=None,
-    SEED=1000,
+    SEED=10000,
     mode="rfa",
     init_method="arora_balanced",
     init_gain=1.0,
 ):
-    output_dim = 28 * 28
+    input_dim = 100
+    output_dim = 50
 
     # Create network with consistent seed
-    if mode == "rfa":
+    if mode == "RFA":
         net = model_rfa.Net(
-            28 * 28,
+            input_dim,
+            num_classes=output_dim,
+            hidden_layers=hidden_layers,
+            seed=SEED,
+            init_method=init_method,
+            init_gain=init_gain,
+        )
+    elif mode == "DFA":
+        net = model_dfa.Net(
+            input_dim,
             num_classes=output_dim,
             hidden_layers=hidden_layers,
             seed=SEED,
@@ -50,7 +62,7 @@ def get_untrained_net(
         )
     else:
         net = model.Net(
-            28 * 28,
+            input_dim,
             num_classes=output_dim,
             hidden_layers=hidden_layers,
             seed=SEED,
@@ -61,45 +73,52 @@ def get_untrained_net(
 
 
 def get_config(
+    hidden_layers,
     run_id="1",
-    project="Balancedness_vs_RFA",
-    entity="Matrig100",
+    project="4_layer_fc_balancedness",
+    entity="ICLR_2027",
     run_name="FC",
-    mode="rfa",
-    hidden_layers=None,
+    mode="rfa",  
     init_method="arora_balanced",
     init_gain=1.0,
+    SEED=1000,
 ):
-    SEED = 20
 
-    net = get_untrained_net(
-        hidden_layers=hidden_layers,
-        SEED=SEED,
-        mode=mode,
-        init_method=init_method,
-        init_gain=init_gain
-    )
+    depth = len(hidden_layers)
+    width = hidden_layers[0]
+    run_name = f"{mode}_{SEED}_{depth}_{width}"
 
-    depth = (len(hidden_layers) if hidden_layers is not None else 1) + 1
-    run_name = f"FC_{SEED}_{depth}_{mode}_{init_method}"
-
-    # Reset global seeds again before creating loaders. 
-    # Model initialization (especially RFA initializing matrix B) consumes 
-    # the global RNG differently, which drifts the base seed used for DataLoader workers.
-    torch.manual_seed(SEED)
-    if torch.cuda.is_available():
-        torch.cuda.manual_seed_all(SEED)
 
     # Pass seed to loaders for reproducible data splitting and shuffling
     trainloader, valloader, testloader = get_loaders(seed=SEED)
 
-    optimizer = torch.optim.SGD(net.parameters(), lr=0.01)
+    # Exhaustive seed reset to ensure global state is identical before data loading.
+    # This covers cases where library-level initialization (like WandB or ONNX) 
+    # might have touched various random generators.
+    random.seed(SEED)
+    np.random.seed(SEED)
+    torch.manual_seed(SEED)
+    torch.cuda.manual_seed(SEED)
+    torch.cuda.manual_seed_all(SEED)
+    if torch.cuda.is_available():
+        torch.cuda.manual_seed_all(SEED)
+
+    net = get_untrained_net(
+            hidden_layers=hidden_layers,
+            SEED=SEED,
+            mode=mode,
+            init_method=init_method,
+            init_gain=init_gain
+        )
+
+    
+    optimizer = torch.optim.SGD(net.parameters(), lr=0.001)
     #scheduler = CosineAnnealingWarmRestartsDecay(optimizer, T_0=int(epochs/3)+1, decay=0.8)
     scheduler = None
     lfn = nn.MSELoss()
 
     config_dir = os.path.dirname(os.path.abspath(__file__))
-    target_matrix_path = os.path.join(config_dir, 'random_matrix_784x784.hkl')
+    target_matrix_path = os.path.join(config_dir, 'random_matrix_50x100_signed.hkl')
 
     config = {
         "project": f"{project}",
@@ -116,11 +135,7 @@ def get_config(
         "weight_decay": optimizer.param_groups[0].get('weight_decay', 0),
         "scheduler_name": type(scheduler).__name__ if scheduler else "None",
         "task_type": "regression",
-        "output_dim": 28 * 28,
-        "max_images": 32,
-        "rotate_inputs": False,
-        # Use 'channels_last' for potential performance boost with 4D tensors (e.g. CNNs)
-        "memory_format": "channels_last",
+        "hidden_layers": hidden_layers,
         "net": net,
         "train_loader": trainloader,
         "val_loader": valloader,

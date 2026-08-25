@@ -14,7 +14,7 @@ SUPPORTED_INITIALIZERS = (
 
 
 def arora_balanced_initialization(
-    layers: list[nn.Linear],
+    layers,  # list of nn.Linear or LinearRFA layers
     distribution: str = "normal",
     mean: float = 0.0,
     std: float = 1.0,
@@ -31,6 +31,13 @@ def arora_balanced_initialization(
 
     The base matrix A is drawn from the specified distribution. For gaussian (normal),
     mean and std can be set to match paper perturbation settings.
+    
+    Args:
+        layers: List of nn.Linear or LinearRFA layers with .weight, .bias, .in_features, .out_features
+        distribution: "normal" or "uniform"
+        mean: Mean for normal distribution
+        std: Standard deviation for normal distribution
+        bias_value: Value to initialize bias to
     """
     if len(layers) == 0:
         return
@@ -40,26 +47,21 @@ def arora_balanced_initialization(
     inner_dims = [layer.out_features for layer in layers[:-1]]
     r = min(d0, dN)
 
-    if len(inner_dims) > 0 and min(inner_dims) < r:
-        raise ValueError(
-            f"Balanced initialization requires min(hidden dims) >= min(d0,dN). "
-            f"Got d0={d0}, dN={dN}, inner={inner_dims}"
-        )
-
     device = layers[0].weight.device
     dtype = layers[0].weight.dtype
+    N = len(layers)
 
     if distribution == "normal":
         A = torch.randn(dN, d0, device=device, dtype=dtype) * std + mean
     elif distribution == "uniform":
-        A = (torch.rand(dN, d0, device=device, dtype=dtype) * 2.0 - 1.0) * std + mean
+        A = torch.empty(dN, d0, device=device, dtype=dtype)
+        init.uniform_(A, mean - std, mean + std)
     else:
         raise ValueError(f"Unsupported distribution '{distribution}' for Arora balanced init")
 
     U, S, Vh = torch.linalg.svd(A, full_matrices=False)
     # A = U @ diag(S) @ Vh
 
-    N = len(layers)
     root = S.pow(1.0 / N)
     # diag_root: r x r
     diag_root = torch.diag(root)

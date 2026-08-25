@@ -8,7 +8,7 @@ import torch.nn.functional as F
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 from utils.initializer import initialize_linear_layer, arora_balanced_initialization
-from utils.linear_rfa import LinearRFA
+from utils.layers.linear_rfa import LinearRFA
 
 class Net(nn.Module):
     def __init__(
@@ -74,9 +74,9 @@ class Net(nn.Module):
         if self.init_method == "arora_balanced":
             arora_balanced_initialization(
                 linear_layers,
-                distribution="normal",
+                distribution="uniform",
                 mean=0.0,
-                std=self.init_gain,
+                std=1.0,
                 bias_value=0.0,
             )
         else:
@@ -92,7 +92,8 @@ class Net(nn.Module):
         # This ensures forward weight initialization consumes the same RNG sequence 
         # as the standard model.
         for layer in linear_layers:
-            nn.init.kaiming_uniform_(layer.B, a=math.sqrt(5))
+            # nn.init.kaiming_uniform_(layer.B, a=math.sqrt(5))
+            nn.init.uniform_(layer.B, -0.1, 0.1)
 
     def forward(self, x):
         x = self.features(x)
