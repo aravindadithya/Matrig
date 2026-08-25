@@ -41,7 +41,7 @@ class Net(nn.Module):
             layers.append(LinearDFA(prev_dim, hidden_dim, num_classes=num_classes, bias=bias))
             prev_dim = hidden_dim
 
-        self.features = nn.Sequential(*layers)
+        self.features = nn.ModuleList(layers)
         self.classifier = LinearDFA(
             prev_dim,
             num_classes,
@@ -84,7 +84,7 @@ class Net(nn.Module):
             else:
                 # nn.init.kaiming_uniform_(layer.B, a=math.sqrt(5))
                 # nn.init.kaiming_uniform_(layer.R, a=math.sqrt(5))
-                nn.init.uniform_(layer.B, -0.01, 0.01)
+                nn.init.uniform_(layer.B, -0.1, 0.1)
 
     def forward(self, x, global_error=None):
         for layer in self.features:

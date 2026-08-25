@@ -11,18 +11,19 @@ from utils.mat_gen import (
     generate_dataset, save_dataset
 )
 
-# Generate and save a new 784x784 signed matrix without replacing the old one.
-print("Generating 784x784 signed matrix...")
-matrix = generate_random_matrix(n=784, distribution="signed", seed=1000)
-matrix_path = '/workspaces/Matrig/Mat1/random_matrix_784x784_signed.hkl'
+# Generate and save a new 50x100 signed matrix.
+print("Generating 50x100 signed matrix...")
+matrix = generate_random_matrix(rows=50, cols=100, distribution="signed", seed=1000)
+matrix_path = '/workspaces/Matrig/Mat1/random_matrix_50x100_signed.hkl'
 save_matrix(matrix, matrix_path)
 
 # Generate and save the custom dataset
 print("\nGenerating custom dataset...")
 X_train, y_train, X_test, y_test, matrix_used = generate_dataset(
-    num_train_samples=60000,
-    num_test_samples=10000,
-    input_dim=784,
+    num_train_samples=20000,
+    num_test_samples=5000,
+    input_dim=100,
+    output_dim=50,
     matrix=matrix,
     seed=1000
 )

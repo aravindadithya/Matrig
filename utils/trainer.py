@@ -87,9 +87,6 @@ def train_network(config, num_epochs = 5, checkpoint_interval=10):
             wandb.run.summary["best_val_accuracy"] = best_val_acc
             wandb.run.summary["best_val_loss"] = best_val_loss
             
-            # logger.log_confusion_matrix(y_true=val_targets, preds=val_preds,
-            #                             epoch=i, class_names=[str(c) for c in range(10)],
-            #                             log_key="Validation Confusion Matrix")
 
             if logger.inputs is not None:
                 logger.log_visuals(net, epoch=i)
@@ -118,12 +115,6 @@ def train_network(config, num_epochs = 5, checkpoint_interval=10):
     wandb.run.summary["best_test_accuracy"] = best_test_acc
     wandb.run.summary["best_test_loss"] = best_test_loss
     
-    # logger.log_confusion_matrix(y_true=test_targets, preds=test_preds,
-    #                             epoch=i, class_names=[str(i) for i in range(10)],
-    #                             log_key="Test Confusion Matrix")
-
-    #logger.log_predictions_table(net, test_loader, epoch=i, log_key="Test Predictions", limit=256)
-    
 
     logger.finish()
     
@@ -146,14 +137,6 @@ def train_step(net, optimizer, lfn, train_loader, config):
         optimizer.zero_grad(set_to_none=True)
         inputs, labels = batch
         targets = labels
-        
-        '''
-        # Optimization: Channels Last for inputs matches the model layout
-        if inputs.dim() == 4:
-            inputs = inputs.to(device='cuda', memory_format=memory_format, non_blocking=True)
-        else:
-            inputs = inputs.to(device='cuda', non_blocking=True)
-        '''
 
         inputs = inputs.to(device='cuda', non_blocking=True)
         target = targets.cuda(non_blocking=True)

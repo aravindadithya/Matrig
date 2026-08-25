@@ -33,26 +33,27 @@ def get_loaders(batch_size=128, seed=10000):
 
 def get_untrained_net(
     hidden_layers=None,
-    SEED=1000,
+    SEED=10000,
     mode="rfa",
     init_method="arora_balanced",
     init_gain=1.0,
 ):
-    output_dim = 28 * 28
+    input_dim = 100
+    output_dim = 50
 
     # Create network with consistent seed
-    if mode == "rfa":
+    if mode == "RFA":
         net = model_rfa.Net(
-            28 * 28,
+            input_dim,
             num_classes=output_dim,
             hidden_layers=hidden_layers,
             seed=SEED,
             init_method=init_method,
             init_gain=init_gain,
         )
-    elif mode == "dfa":
+    elif mode == "DFA":
         net = model_dfa.Net(
-            28 * 28,
+            input_dim,
             num_classes=output_dim,
             hidden_layers=hidden_layers,
             seed=SEED,
@@ -61,7 +62,7 @@ def get_untrained_net(
         )
     else:
         net = model.Net(
-            28 * 28,
+            input_dim,
             num_classes=output_dim,
             hidden_layers=hidden_layers,
             seed=SEED,
@@ -83,20 +84,13 @@ def get_config(
     SEED=1000,
 ):
 
-    
     depth = len(hidden_layers)
     width = hidden_layers[0]
+    run_name = f"{mode}_{SEED}_{depth}_{width}"
 
-    net = get_untrained_net(
-        hidden_layers=hidden_layers,
-        SEED=SEED,
-        mode=mode,
-        init_method=init_method,
-        init_gain=init_gain
-    )
 
-    depth = (len(hidden_layers) if hidden_layers is not None else 1) + 1
-    run_name = f"FC_{SEED}_{depth}_{width}_{mode}_{init_method}"
+    # Pass seed to loaders for reproducible data splitting and shuffling
+    trainloader, valloader, testloader = get_loaders(seed=SEED)
 
     # Exhaustive seed reset to ensure global state is identical before data loading.
     # This covers cases where library-level initialization (like WandB or ONNX) 
@@ -109,16 +103,22 @@ def get_config(
     if torch.cuda.is_available():
         torch.cuda.manual_seed_all(SEED)
 
-    # Pass seed to loaders for reproducible data splitting and shuffling
-    trainloader, valloader, testloader = get_loaders(seed=SEED)
+    net = get_untrained_net(
+            hidden_layers=hidden_layers,
+            SEED=SEED,
+            mode=mode,
+            init_method=init_method,
+            init_gain=init_gain
+        )
 
-    optimizer = torch.optim.Adam(net.parameters(), lr=0.01)
+    
+    optimizer = torch.optim.SGD(net.parameters(), lr=0.001)
     #scheduler = CosineAnnealingWarmRestartsDecay(optimizer, T_0=int(epochs/3)+1, decay=0.8)
     scheduler = None
     lfn = nn.MSELoss()
 
     config_dir = os.path.dirname(os.path.abspath(__file__))
-    target_matrix_path = os.path.join(config_dir, 'random_matrix_784x784_signed.hkl')
+    target_matrix_path = os.path.join(config_dir, 'random_matrix_50x100_signed.hkl')
 
     config = {
         "project": f"{project}",

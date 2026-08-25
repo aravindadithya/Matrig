@@ -82,6 +82,8 @@ class LinearDFA(nn.Module):
 
 
     def forward(self, input, global_error=None):
+        if global_error is None:
+            return F.linear(input, self.weight, self.bias)
         return LinearDFAFunction.apply(
             input,
             self.weight,

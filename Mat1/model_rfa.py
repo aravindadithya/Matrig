@@ -93,7 +93,7 @@ class Net(nn.Module):
         # as the standard model.
         for layer in linear_layers:
             # nn.init.kaiming_uniform_(layer.B, a=math.sqrt(5))
-            nn.init.uniform_(layer.B, -0.01, 0.01)
+            nn.init.uniform_(layer.B, -0.1, 0.1)
 
     def forward(self, x):
         x = self.features(x)

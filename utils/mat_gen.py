@@ -10,12 +10,13 @@ from torch.utils.data import TensorDataset, DataLoader
 import hickle as hkl
 
 
-def generate_random_matrix(n, mean=0.0, std=1.0, seed=None, distribution="normal"):
+def generate_random_matrix(rows, cols=None, mean=0.0, std=1.0, seed=None, distribution="normal"):
     """
-    Generate an n*n matrix with entries randomly sampled from normal distribution.
+    Generate a matrix with entries randomly sampled from a distribution.
     
     Args:
-        n: Size of the square matrix (n*n)
+        rows: Number of matrix rows
+        cols: Number of matrix columns. Defaults to rows for a square matrix.
         mean: Mean of the normal distribution (default: 0.0)
         std: Standard deviation of the normal distribution (default: 1.0)
         seed: Random seed for reproducibility (default: None)
@@ -23,13 +24,15 @@ def generate_random_matrix(n, mean=0.0, std=1.0, seed=None, distribution="normal
             uniformly from {-1, 1}.
     
     Returns:
-        numpy array of shape (n, n)
+        numpy array of shape (rows, cols)
     """
+    if cols is None:
+        cols = rows
     rng = np.random.default_rng(seed)
     if distribution == "normal":
-        return rng.normal(loc=mean, scale=std, size=(n, n))
+        return rng.normal(loc=mean, scale=std, size=(rows, cols))
     if distribution == "signed":
-        return rng.choice(np.array([-1, 1]), size=(n, n))
+        return rng.choice(np.array([-1, 1]), size=(rows, cols))
     raise ValueError(f"Unsupported matrix distribution: {distribution}")
 
 
@@ -61,7 +64,7 @@ def load_matrix(filepath):
 
 
 def generate_dataset(num_train_samples=60000, num_test_samples=10000,
-                     input_dim=784, matrix=None, seed=None):
+                     input_dim=784, output_dim=None, matrix=None, seed=None):
     """
     Generate a regression dataset from random inputs using y = Mx.
     
@@ -69,7 +72,8 @@ def generate_dataset(num_train_samples=60000, num_test_samples=10000,
         num_train_samples: Number of training samples (default: 60000)
         num_test_samples: Number of test samples (default: 10000)
         input_dim: Dimension of input features (default: 784)
-        matrix: Optional transformation matrix M of shape (input_dim, input_dim)
+        output_dim: Dimension of target features. Defaults to input_dim.
+        matrix: Optional transformation matrix M of shape (output_dim, input_dim)
             If None, a random matrix is generated.
         seed: Random seed for reproducibility
     
@@ -77,13 +81,15 @@ def generate_dataset(num_train_samples=60000, num_test_samples=10000,
         Tuple of (X_train, y_train, X_test, y_test, matrix) as numpy arrays
     """
     rng = np.random.default_rng(seed)
+    if output_dim is None:
+        output_dim = input_dim
 
     if matrix is None:
-        matrix = generate_random_matrix(input_dim, seed=seed).astype(np.float32)
+        matrix = generate_random_matrix(output_dim, input_dim, seed=seed).astype(np.float32)
     else:
         matrix = np.asarray(matrix, dtype=np.float32)
-        if matrix.shape != (input_dim, input_dim):
-            raise ValueError(f"Expected matrix shape {(input_dim, input_dim)}, got {matrix.shape}")
+        if matrix.shape != (output_dim, input_dim):
+            raise ValueError(f"Expected matrix shape {(output_dim, input_dim)}, got {matrix.shape}")
     
     # Inputs are drawn from N(0, I): independent standard-normal coordinates.
     X_train = rng.normal(0.0, 1.0, size=(num_train_samples, input_dim)).astype(np.float32)
