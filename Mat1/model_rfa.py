@@ -7,7 +7,11 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
-from utils.initializer import initialize_linear_layer, arora_balanced_initialization
+from utils.initializer import (
+    initialize_linear_layer,
+    arora_balanced_initialization,
+    bp_adversary_initialization,
+)
 from utils.layers.linear_rfa import LinearRFA
 
 class Net(nn.Module):

@@ -24,6 +24,8 @@ class Net(nn.Module):
         seed=None,
         init_method="arora_balanced",
         init_gain=1.0,
+        learning_rate=0.01,
+        c=0.5,
     ):
         super(Net, self).__init__()
 
@@ -33,6 +35,8 @@ class Net(nn.Module):
         self.bias = bias
         self.init_method = init_method.lower()
         self.init_gain = init_gain
+        self.learning_rate = learning_rate
+        self.c = c
 
         if hidden_layers is None:
             hidden_layers = [1024]
@@ -72,6 +76,13 @@ class Net(nn.Module):
                 std= 1.0,
                 bias_value=0.0,
             )
+        elif self.init_method == "bp_adversary":
+            bp_adversary_initialization(
+                linear_layers,
+                learning_rate=self.learning_rate,
+                c=self.c,
+                bias_value=0.0,
+            )
         else:
             for layer in linear_layers:
                 initialize_linear_layer(
@@ -79,6 +90,8 @@ class Net(nn.Module):
                     method=self.init_method,
                     gain=self.init_gain,
                     bias_value=0.0,
+                    learning_rate=self.learning_rate,
+                    c=self.c,
                 )
 
         for layer in linear_layers:
@@ -88,7 +101,7 @@ class Net(nn.Module):
             else:
                 # nn.init.kaiming_uniform_(layer.B, a=math.sqrt(5))
                 # nn.init.kaiming_uniform_(layer.R, a=math.sqrt(5))
-                nn.init.uniform_(layer.B, -0.1, 0.1)
+                nn.init.uniform_(layer.B, -0.01, 0.01)
 
     def forward(self, x, global_error=None):
         for layer in self.features:
