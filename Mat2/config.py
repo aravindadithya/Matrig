@@ -9,6 +9,7 @@ from torch.utils.data import DataLoader
 import sys
 import hickle as hkl
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 from utils.mat_gen import get_data_loaders
 from utils.layers.linear_rfa import LinearRFA
@@ -17,6 +18,17 @@ from utils.layers.linear_dfa import LinearDFA
 import model
 import model_dfa
 import model_rfa
+
+
+def matrix_target_loss(net, target_matrix):
+    """Directly minimize 0.5 * ||W1:N - T||_F^2 w.r.t. network weights."""
+    W_end_to_end = network_weight_product(net)
+    if W_end_to_end.shape != target_matrix.shape:
+        raise ValueError(
+            f"End-to-end matrix shape {tuple(W_end_to_end.shape)} does not match target shape {tuple(target_matrix.shape)}"
+        )
+    residual = W_end_to_end - target_matrix
+    return 0.5 * torch.sum(residual * residual)
 
 
 
@@ -36,7 +48,7 @@ def get_loaders(batch_size=128, seed=10000):
 def network_weight_product(net):
     """Compute the full end-to-end matrix W1:N for all linear layers in the network."""
     linear_weights = [
-        m.weight.detach()
+        m.weight
         for m in net.modules()
         if isinstance(m, (torch.nn.Linear, LinearRFA, LinearDFA))
     ]
@@ -150,10 +162,6 @@ def get_config(
 
     # Pass seed to loaders for reproducible data splitting and shuffling
     trainloader, valloader, testloader = get_loaders(seed=SEED)
-
-    # Exhaustive seed reset to ensure global state is identical before data loading.
-    # This covers cases where library-level initialization (like WandB or ONNX) 
-    # might have touched various random generators.
     random.seed(SEED)
     np.random.seed(SEED)
     torch.manual_seed(SEED)
@@ -165,10 +173,14 @@ def get_config(
 
     #scheduler = CosineAnnealingWarmRestartsDecay(optimizer, T_0=int(epochs/3)+1, decay=0.8)
     scheduler = None
-    lfn = nn.MSELoss()
     config_dir = os.path.dirname(os.path.abspath(__file__))
-    target_matrix_path = os.path.join(config_dir, 'Identity_matrix_784x784.hkl')
+    candidate_paths = [
+        os.path.join(config_dir, 'Identity_matrix_784x784.hkl'),
+        os.path.join(config_dir, 'identity_matrix_784x784.hkl'),
+    ]
+    target_matrix_path = next((p for p in candidate_paths if os.path.exists(p)), candidate_paths[0])
     target_matrix = torch.tensor(hkl.load(target_matrix_path), dtype=torch.float32)
+    lfn = matrix_target_loss
     learning_rate = 0.01
     c= 3/4
 
@@ -196,7 +208,8 @@ def get_config(
         "learning_rate": optimizer.param_groups[0]['lr'],
         "c": c,
         "optimizer_name": type(optimizer).__name__,
-        "loss_function_name": type(lfn).__name__,
+        "loss_function_name": "matrix_target_loss",
+        "loss_mode": "matrix_target",
         "model_architecture": type(net).__name__,
         "model_structure": str(net),
         "num_parameters": sum(p.numel() for p in net.parameters()),

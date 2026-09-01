@@ -12,9 +12,9 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 from utils.mat_gen import get_data_loaders
 
 # Import models from current directory
-from ..Mat2 import model
-from ..Mat2 import model_dfa
-from ..Mat2 import model_rfa
+import model
+import model_dfa
+import model_rfa
 
 
 def get_loaders(batch_size=128, seed=10000):
@@ -34,7 +34,7 @@ def get_loaders(batch_size=128, seed=10000):
 def get_untrained_net(
     hidden_layers=None,
     SEED=10000,
-    mode="rfa",
+    mode="RFA",
     init_method="arora_balanced",
     init_gain=1.0,
 ):
@@ -78,7 +78,7 @@ def get_config(
     project="4_layer_fc_balancedness",
     entity="ICLR_2027",
     run_name="FC",
-    mode="rfa",  
+    mode="RFA",  
     init_method="arora_balanced",
     init_gain=1.0,
     SEED=1000,

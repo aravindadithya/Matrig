@@ -17,12 +17,15 @@ class Net(nn.Module):
     def __init__(
         self,
         dim,
+        activation,
         num_classes,
         hidden_layers=None,
         bias=False,
         seed=None,
         init_method="arora_balanced",
         init_gain=1.0,
+        learning_rate=0.01,
+        c=0.5,
     ):
         """
         Fully connected neural network with configurable hidden layers.
@@ -37,16 +40,20 @@ class Net(nn.Module):
             init_method: Weight initialization method
                          (kaiming, he, glorot, arora_balanced, orthogonal)
             init_gain: Gain/scaling factor for initialization
+            activation: Activation function to use (default: nn.ReLU())
         """
         super(Net, self).__init__()
 
         self.seed = seed
+        self.activation = activation
 
         self.dim = dim
         self.num_classes = num_classes
         self.bias = bias
         self.init_method = init_method.lower()
         self.init_gain = init_gain
+        self.learning_rate = learning_rate
+        self.c = c
 
         if hidden_layers is None:
             hidden_layers = [1024]
@@ -58,6 +65,7 @@ class Net(nn.Module):
 
         for hidden_dim in hidden_layers:
             layers.append(nn.Linear(prev_dim, hidden_dim, bias=bias))
+            layers.append(self.activation)
             prev_dim = hidden_dim
 
         self.features = nn.Sequential(*layers)
@@ -81,6 +89,13 @@ class Net(nn.Module):
                 std=1.0,
                 bias_value=0.0,
             )
+        elif self.init_method == "bp_adversary":
+            bp_adversary_initialization(
+                linear_layers,
+                learning_rate=self.learning_rate,
+                c=self.c,
+                bias_value=0.0,
+            )
         else:
             for layer in linear_layers:
                 initialize_linear_layer(
@@ -88,6 +103,8 @@ class Net(nn.Module):
                     method=self.init_method,
                     gain=self.init_gain,
                     bias_value=0.0,
+                    learning_rate=self.learning_rate,
+                    c=self.c,
                 )
 
     def forward(self, x):
