@@ -87,7 +87,7 @@ class Net(nn.Module):
                 linear_layers,
                 distribution="uniform",
                 mean=0.0,
-                std=1.0,
+                std=0.30,
                 bias_value=0.0,
             )
         elif self.init_method == "bp_adversary":

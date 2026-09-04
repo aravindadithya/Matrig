@@ -9,6 +9,16 @@ from torchvision import datasets, transforms
 from MNIST import model, model_rfa, model_dfa
 
 
+def one_hot_collate(batch):
+    """Convert integer class labels to one-hot vectors for MSE/BCE-style training."""
+    images = []
+    targets = []
+    for image, label in batch:
+        images.append(image)
+        targets.append(torch.nn.functional.one_hot(torch.tensor(label), num_classes=10).float())
+    return torch.stack(images), torch.stack(targets)
+
+
 def get_loaders(batch_size=128, seed=123, data_dir=None):
     if data_dir is None:
         data_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data")
@@ -28,9 +38,9 @@ def get_loaders(batch_size=128, seed=123, data_dir=None):
     val_size = len(full_train) - train_size
     train_set, val_set = random_split(full_train, [train_size, val_size], generator=generator)
 
-    train_loader = DataLoader(train_set, batch_size=batch_size, shuffle=True, num_workers=2, generator=generator)
-    val_loader = DataLoader(val_set, batch_size=batch_size, shuffle=False, num_workers=2)
-    test_loader = DataLoader(test_set, batch_size=batch_size, shuffle=False, num_workers=2)
+    train_loader = DataLoader(train_set, batch_size=batch_size, shuffle=True, num_workers=2, generator=generator, collate_fn=one_hot_collate)
+    val_loader = DataLoader(val_set, batch_size=batch_size, shuffle=False, num_workers=2, collate_fn=one_hot_collate)
+    test_loader = DataLoader(test_set, batch_size=batch_size, shuffle=False, num_workers=2, collate_fn=one_hot_collate)
 
     return train_loader, val_loader, test_loader
 
@@ -95,7 +105,7 @@ def get_config(
 
     run_name = f"{mode}_{SEED}_{activation.__class__.__name__}_{len(hidden_layers)}_{hidden_layers[0]}"
 
-    trainloader, valloader, testloader = get_loaders(batch_size= 128, seed=SEED)
+    trainloader, valloader, testloader = get_loaders(batch_size= 100, seed=SEED)
 
 
     random.seed(SEED)
@@ -118,9 +128,12 @@ def get_config(
 
     learning_rate = 0.01
     
-    optimizer = torch.optim.Adam(net.parameters(), lr=learning_rate)
+    #optimizer = torch.optim.Adam(net.parameters(), lr=learning_rate)
+
+    optimizer = torch.optim.SGD(net.parameters(), lr=0.01)
     scheduler = None
-    lfn = nn.CrossEntropyLoss()
+    #lfn = nn.CrossEntropyLoss()
+    lfn = nn.MSELoss()
 
     config = {
             "project": f"{project}",

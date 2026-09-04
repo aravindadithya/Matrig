@@ -76,7 +76,7 @@ class Net(nn.Module):
                 linear_layers,
                 distribution="uniform",
                 mean=0.0,
-                std= 1.0,
+                std= 0.30,
                 bias_value=0.0,
             )
         elif self.init_method == "bp_adversary":
@@ -104,7 +104,7 @@ class Net(nn.Module):
             else:
                 # nn.init.kaiming_uniform_(layer.B, a=math.sqrt(5))
                 # nn.init.kaiming_uniform_(layer.R, a=math.sqrt(5))
-                nn.init.uniform_(layer.B, -0.01, 0.01)
+                nn.init.uniform_(layer.B, -0.1, 0.1)
 
     def forward(self, x, global_error=None):
         for layer in self.features:
