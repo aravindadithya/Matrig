@@ -49,7 +49,7 @@ def train_network(config, num_epochs = 5, checkpoint_interval=10):
 
         print("EPOCH: ", i)
         logger.log_matrix_diagnostics(i)
-        logger.log_singular_values(i)
+        #logger.log_singular_values(i)
         #logger.log_agop(i)
         #logger.count_sparsity(i)
 

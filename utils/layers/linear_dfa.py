@@ -27,7 +27,7 @@ class LinearDFAFunction(torch.autograd.Function):
             local_error = e
         else:
             B = B.to(weight.dtype) #[num_classes, out_features]
-            local_error = torch.matmul(e, B)
+            local_error = torch.matmul(e, B)* grad_output # [bs, out_features]
 
         grad_input = grad_weight = grad_bias = None
 
