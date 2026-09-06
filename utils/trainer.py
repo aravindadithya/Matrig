@@ -13,7 +13,7 @@ fn_data = {}
 def train_network(config, num_epochs = 5, checkpoint_interval=10):
 
     # Force full FP32 for bit-perfect parity between native and custom layers
-    torch.set_float32_matmul_precision('highest')
+    torch.set_float32_matmul_precision('high')
 
     # For full reproducibility
     torch.backends.cudnn.deterministic = True
@@ -53,16 +53,16 @@ def train_network(config, num_epochs = 5, checkpoint_interval=10):
         #logger.log_agop(i)
         #logger.count_sparsity(i)
 
-        train_loss_full, train_acc_full , train_preds, train_targets= val_step(net, train_loader, config, lfn)
-        val_loss, val_acc, val_preds, val_targets = val_step(net, val_loader, config, lfn)
+        #train_loss_full, train_acc_full , train_preds, train_targets= val_step(net, train_loader, config, lfn)
+        val_loss, val_acc = val_step(net, val_loader, config, lfn)
 
         train_loss, train_acc = train_step(net, optimizer, lfn, train_loader, config)
         # Validation loss and accuracy are calculated after backprob for each epoch
         
         log_data = {
             "epoch": i,
-            "train/accuracy": train_acc_full,
-            "train/loss": train_loss_full,
+            "train/accuracy": train_acc,
+            "train/loss": train_loss,
             "val/accuracy": val_acc,
             "val/loss": val_loss,
             "learning_rate": optimizer.param_groups[0]['lr'],
@@ -111,7 +111,7 @@ def train_network(config, num_epochs = 5, checkpoint_interval=10):
         
         net.load_state_dict(best_state_dict)
 
-    best_test_loss, best_test_acc, test_preds, test_targets = val_step(net, test_loader, config, lfn)
+    best_test_loss, best_test_acc = val_step(net, test_loader, config, lfn)
     wandb.run.summary["best_test_accuracy"] = best_test_acc
     wandb.run.summary["best_test_loss"] = best_test_loss
     
@@ -174,56 +174,50 @@ def train_step(net, optimizer, lfn, train_loader, config):
     return train_loss, train_acc
 
 
-def val_step(net, val_loader, config, lfn=None):
-    # global scaler
+def val_step(net, val_loader, config, lfn=None, return_predictions=False):
     net.eval()
     val_loss_accum = torch.tensor(0.0, device='cuda')
     correct_accum = torch.tensor(0.0, device='cuda')
     total = 0
-    all_preds = []
-    all_targets = []
-    val_loss = None
+    
+    all_preds = [] if return_predictions else None
+    all_targets = [] if return_predictions else None
 
     memory_format = torch.channels_last if config.get('memory_format') == 'channels_last' else torch.contiguous_format
-    for batch_idx, batch in enumerate(val_loader):
-        inputs, labels = batch
-        targets = labels
-        if inputs.dim() == 4:
-            inputs = inputs.to(device='cuda', memory_format=memory_format, non_blocking=True)
-        else:
-            inputs = inputs.to(device='cuda', non_blocking=True)
-        target = targets.cuda(non_blocking=True)
 
-        with torch.no_grad():
-            # with autocast(device_type='cuda'): 
-            #     output = net(inputs)
-            #     if lfn:
-            #         loss = lfn(output, target)
-            #         val_loss_accum += loss.detach() * inputs.size(0)
+    with torch.no_grad():
+        for inputs, targets in val_loader:
+            if inputs.dim() == 4:
+                inputs = inputs.to(device='cuda', memory_format=memory_format, non_blocking=True)
+            else:
+                inputs = inputs.to(device='cuda', non_blocking=True)
+            
+            target = targets.to(device='cuda', non_blocking=True)
+
             output = net(inputs)
             if lfn:
                 loss = lfn(output, target)
                 val_loss_accum += loss.detach() * inputs.size(0)
 
-            _, predicted = torch.max(output.data, 1)
+            _, predicted = torch.max(output, 1)
             total += target.size(0)
-            if len(target.size()) > 1:
-                _, labels_idx = torch.max(target, -1)
-            else:
-                labels_idx = target
+            labels_idx = torch.max(target, -1)[1] if target.dim() > 1 else target
 
             correct_accum += (predicted == labels_idx).sum()
-            all_preds.append(predicted)
-            all_targets.append(labels_idx)
 
-    if lfn:
-        val_loss = val_loss_accum.item() / len(val_loader.dataset)
+            if return_predictions:
+                all_preds.append(predicted)
+                all_targets.append(labels_idx)
 
-    val_acc = 100 * correct_accum.item() / total
-    all_preds = torch.cat(all_preds).cpu().tolist()
-    all_targets = torch.cat(all_targets).cpu().tolist()
+    val_loss = (val_loss_accum.item() / total) if lfn else None
+    val_acc = 100.0 * correct_accum.item() / total
 
-    return val_loss, val_acc, all_preds, all_targets
+    if return_predictions:
+        all_preds = torch.cat(all_preds).cpu().tolist()
+        all_targets = torch.cat(all_targets).cpu().tolist()
+        return val_loss, val_acc, all_preds, all_targets
+
+    return val_loss, val_acc
 
 
 def get_trained_net(config):
