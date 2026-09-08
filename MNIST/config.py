@@ -35,10 +35,7 @@ def get_loaders(batch_size=128, seed=123, data_dir=None):
     val_size = len(full_train) - train_size
     train_set, val_set = random_split(full_train, [train_size, val_size], generator=generator)
 
-    # Optimizations:
-    # 1. num_workers reduced to 4 (prevents CPU thread thrashing)
-    # 2. pin_memory=True (accelerates CPU -> GPU memory transfers)
-    # 3. persistent_workers=True (keeps worker processes alive between epochs)
+    
     train_loader = DataLoader(
         train_set, 
         batch_size=batch_size, 
@@ -53,7 +50,7 @@ def get_loaders(batch_size=128, seed=123, data_dir=None):
         val_set, 
         batch_size=batch_size, 
         shuffle=False, 
-        num_workers=2, 
+        num_workers=4, 
         pin_memory=True,
         persistent_workers=True,
         collate_fn=one_hot_collate
@@ -62,7 +59,7 @@ def get_loaders(batch_size=128, seed=123, data_dir=None):
         test_set, 
         batch_size=batch_size, 
         shuffle=False, 
-        num_workers=2, 
+        num_workers=4, 
         pin_memory=True,
         persistent_workers=True,
         collate_fn=one_hot_collate
@@ -120,7 +117,7 @@ def get_config(
     activation,
     hidden_layers,
     run_id="1",
-    project="MNIST_fc_balancedness",
+    project="MNIST_balancedness_initmethods",
     entity="ICLR_2027",
     run_name="FC",
     mode="RFA",  
@@ -129,7 +126,7 @@ def get_config(
     SEED=1000,
 ):
 
-    run_name = f"{mode}_{SEED}_{activation.__class__.__name__}_{len(hidden_layers)}_{hidden_layers[0]}"
+    
 
     trainloader, valloader, testloader = get_loaders(batch_size=1024, seed=SEED)
 
@@ -150,10 +147,10 @@ def get_config(
         init_gain=init_gain
     )
         
-    learning_rate = 0.01
+    learning_rate = 0.1
     
     # optimizer = torch.optim.Adam(net.parameters(), lr=learning_rate)
-    optimizer = torch.optim.SGD(net.parameters(), lr=0.01)
+    optimizer = torch.optim.SGD(net.parameters(), lr=0.1)
     scheduler = None
     lfn = nn.CrossEntropyLoss()
     #lfn = nn.MSELoss()

@@ -103,6 +103,7 @@ class Net(nn.Module):
                     method=self.init_method,
                     gain=self.init_gain,
                     bias_value=0.0,
+                    nonlinearity=self.activation.__class__.__name__.lower(),
                     learning_rate=self.learning_rate,
                     c=self.c,
                 )

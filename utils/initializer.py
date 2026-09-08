@@ -152,19 +152,22 @@ def initialize_linear_layer(
     method: str,
     gain: float = 1.0,
     bias_value: float = 0.0,
-    nonlinearity: str = "relu",
+    nonlinearity: str = "tanh",
     learning_rate: float = 0.01,
     c: float = 0.5,
 ) -> None:
     """Initialize a single Linear layer using the selected method."""
     method = method.lower()
-
+    gain = init.calculate_gain(nonlinearity)
+    print(f"Initializing layer {layer} with method '{method}'")
+    print(f"Layer shape: {layer.weight.shape}, nonlinearity: {nonlinearity}, gain: {gain}")
     if method == "kaiming":
         init.kaiming_uniform_(layer.weight, a=0.0, mode="fan_in", nonlinearity=nonlinearity)
     elif method == "he":
         init.kaiming_normal_(layer.weight, a=0.0, mode="fan_in", nonlinearity=nonlinearity)
     elif method in ("glorot", "xavier"):
-        init.xavier_uniform_(layer.weight, gain=gain)
+        #init.xavier_uniform_(layer.weight, gain=gain)
+        init.xavier_normal_(layer.weight, gain=gain)
     elif method == "orthogonal":
         init.orthogonal_(layer.weight, gain=gain)
     elif method == "zeros":

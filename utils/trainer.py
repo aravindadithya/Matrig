@@ -1,4 +1,6 @@
 
+import copy
+
 import torch
 import wandb
 import time
@@ -83,7 +85,7 @@ def train_network(config, num_epochs = 5, checkpoint_interval=10):
         if val_acc >= best_val_acc:
             best_val_acc = val_acc
             best_val_loss = val_loss
-            best_state_dict = net.state_dict()
+            best_state_dict = copy.deepcopy(net.state_dict())
             wandb.run.summary["best_val_accuracy"] = best_val_acc
             wandb.run.summary["best_val_loss"] = best_val_loss
             
