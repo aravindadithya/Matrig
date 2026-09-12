@@ -16,12 +16,23 @@ SUPPORTED_INITIALIZERS = (
 )
 
 
+def shuffle_matrix_cells(layers) -> None:
+    """Randomly permute the cells of each layer weight independently."""
+    with torch.no_grad():
+        for layer in layers:
+            weight = layer.weight
+            permutation = torch.randperm(weight.numel(), device=weight.device)
+            shuffled = weight.reshape(-1)[permutation].reshape_as(weight)
+            weight.copy_(shuffled)
+
+
 def arora_balanced_initialization(
     layers,  # list of nn.Linear or LinearRFA layers
     distribution: str = "normal",
     mean: float = 0.0,
     std: float = 1.0,
     bias_value: float = 0.0,
+    shuffle: bool = False,
 ) -> None:
     """Apply Arora balanced initialization to a sequence of linear layers.
 
@@ -41,6 +52,7 @@ def arora_balanced_initialization(
         mean: Mean for normal distribution
         std: Standard deviation for normal distribution
         bias_value: Value to initialize bias to
+        shuffle: Randomly permute weight cells independently after initialization
     """
     if len(layers) == 0:
         return
@@ -57,6 +69,7 @@ def arora_balanced_initialization(
     if distribution == "normal":
         A = torch.randn(dN, d0, device=device, dtype=dtype) * std + mean
     elif distribution == "uniform":
+        #Actual std is std/sqrt(3)
         A = torch.empty(dN, d0, device=device, dtype=dtype)
         init.uniform_(A, mean - std, mean + std)
     else:
@@ -93,6 +106,9 @@ def arora_balanced_initialization(
 
         if layer.bias is not None:
             layer.bias.data.fill_(bias_value)
+
+    if shuffle:
+        shuffle_matrix_cells(layers)
 
 
 def bp_adversary_initialization(
@@ -166,8 +182,8 @@ def initialize_linear_layer(
     elif method == "he":
         init.kaiming_normal_(layer.weight, a=0.0, mode="fan_in", nonlinearity=nonlinearity)
     elif method in ("glorot", "xavier"):
-        #init.xavier_uniform_(layer.weight, gain=gain)
-        init.xavier_normal_(layer.weight, gain=gain)
+        init.xavier_uniform_(layer.weight, gain=gain)
+        #init.xavier_normal_(layer.weight, gain=gain)
     elif method == "orthogonal":
         init.orthogonal_(layer.weight, gain=gain)
     elif method == "zeros":
