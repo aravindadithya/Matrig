@@ -3,10 +3,10 @@ import random
 import numpy as np
 import torch
 import torch.nn as nn
-from torch.utils.data import DataLoader, random_split
+from torch.utils.data import DataLoader, random_split, Subset
 from torchvision import datasets, transforms
 
-from MNIST import model, model_rfa, model_dfa
+from CIFAR10 import model, model_rfa, model_dfa
 
 
 def one_hot_collate(batch):
@@ -21,19 +21,31 @@ def get_loaders(batch_size=128, seed=123, data_dir=None):
         data_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data")
     os.makedirs(data_dir, exist_ok=True)
 
-    transform = transforms.Compose([
+    train_transform = transforms.Compose([
+        transforms.RandomCrop(32, padding=4),
+        transforms.RandomHorizontalFlip(),
         transforms.ToTensor(),
-        transforms.Normalize((0.1307,), (0.3081,)),
+        transforms.Normalize((0.4914, 0.4822, 0.4465), (0.2470, 0.2435, 0.2616)),
+        transforms.Lambda(lambda x: x.flatten()),
+    ])
+    eval_transform = transforms.Compose([
+        transforms.ToTensor(),
+        transforms.Normalize((0.4914, 0.4822, 0.4465), (0.2470, 0.2435, 0.2616)),
         transforms.Lambda(lambda x: x.flatten()),
     ])
 
-    full_train = datasets.MNIST(data_dir, train=True, download=True, transform=transform)
-    test_set = datasets.MNIST(data_dir, train=False, download=True, transform=transform)
+    full_train = datasets.CIFAR10(data_dir, train=True, download=True, transform=eval_transform)
+    augmented_train = datasets.CIFAR10(data_dir, train=True, download=False, transform=train_transform)
+    test_set = datasets.CIFAR10(data_dir, train=False, download=True, transform=eval_transform)
 
     generator = torch.Generator().manual_seed(seed)
     train_size = int(0.8 * len(full_train))
     val_size = len(full_train) - train_size
-    train_set, val_set = random_split(full_train, [train_size, val_size], generator=generator)
+    train_indices, val_indices = random_split(
+        range(len(full_train)), [train_size, val_size], generator=generator
+    )
+    train_set = Subset(augmented_train, train_indices.indices)
+    val_set = Subset(full_train, val_indices.indices)
 
     
     train_loader = DataLoader(
@@ -75,9 +87,10 @@ def get_untrained_net(
     mode="RFA",
     init_method="arora_balanced",
     init_gain=1.0,
-    feedback_range=0.1,
+    feedback_range=0.05,
+    arora_std=1.0,
 ):
-    input_dim = 784
+    input_dim = 3 * 32 * 32
     output_dim = 10
 
     # Create network with consistent seed
@@ -91,6 +104,7 @@ def get_untrained_net(
             init_method=init_method,
             init_gain=init_gain,
             feedback_range=feedback_range,
+            arora_std=arora_std,
         )
     elif mode == "DFA":
         net = model_dfa.Net(
@@ -120,19 +134,18 @@ def get_config(
     activation,
     hidden_layers,
     run_id="1",
-    project="MNIST_balancedness_initmethods",
+    project="CIFAR10_balancedness_initmethods",
     entity="ICLR_2027",
     run_name="FC",
     mode="RFA",  
     init_method="arora_balanced",
     init_gain=1.0,
-    feedback_range=0.1,
+    feedback_range=0.05,
+    arora_std=1000.0,
     SEED=1000,
 ):
 
-    
-
-    trainloader, valloader, testloader = get_loaders(batch_size=1024, seed=SEED)
+    trainloader, valloader, testloader = get_loaders(batch_size=256, seed=SEED)
 
     random.seed(SEED)
     np.random.seed(SEED)
@@ -150,12 +163,12 @@ def get_config(
         init_method=init_method,
         init_gain=init_gain,
         feedback_range=feedback_range,
+        arora_std=arora_std,
     )
-        
-    learning_rate = 0.1
     
     # optimizer = torch.optim.Adam(net.parameters(), lr=learning_rate)
-    optimizer = torch.optim.SGD(net.parameters(), lr=0.1)
+    optimizer = torch.optim.SGD(net.parameters(), lr=0.1, momentum=0.9)
+
     scheduler = None
     lfn = nn.CrossEntropyLoss()
     #lfn = nn.MSELoss()

@@ -4,6 +4,7 @@ import sys
 
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 from utils.initializer import (
@@ -11,8 +12,7 @@ from utils.initializer import (
     arora_balanced_initialization,
     bp_adversary_initialization,
 )
-from utils.layers.linear_dfa import LinearDFA
-
+from utils.layers.linear_rfa import LinearRFA
 
 class Net(nn.Module):
     def __init__(
@@ -27,11 +27,28 @@ class Net(nn.Module):
         init_gain=1.0,
         learning_rate=0.01,
         c=0.5,
-        feedback_range=0.1,
+        feedback_range=0.05,
+        arora_std=0.30,
     ):
+        """
+        Fully connected neural network with random feedback alignment and configurable hidden layers.
+
+        Args:
+            dim: Input dimension
+            num_classes: Number of output classes
+            hidden_layers: List of hidden layer sizes (default: None means single hidden layer of 1024)
+                          Example: [1024, 512, 256] creates 3 hidden layers
+            bias: Whether to use bias in linear layers (default: False)
+            seed: Random seed for weight initialization (default: None)
+            init_method: Weight initialization method for forward weights
+                         (kaiming, he, glorot, arora_balanced, orthogonal)
+            init_gain: Gain/scaling factor for initialization
+            activation: Activation function to use (default: nn.ReLU())
+        """
         super(Net, self).__init__()
 
         self.seed = seed
+        self.activation = activation
         self.dim = dim
         self.num_classes = num_classes
         self.bias = bias
@@ -40,7 +57,7 @@ class Net(nn.Module):
         self.learning_rate = learning_rate
         self.c = c
         self.feedback_range = feedback_range
-        self.activation = activation
+        self.arora_std = arora_std
 
         if hidden_layers is None:
             hidden_layers = [1024]
@@ -49,27 +66,23 @@ class Net(nn.Module):
 
         layers = []
         prev_dim = dim
+
         for hidden_dim in hidden_layers:
-            layers.append(LinearDFA(prev_dim, hidden_dim, num_classes=num_classes, bias=bias))
+            layers.append(LinearRFA(prev_dim, hidden_dim, bias=bias))
             layers.append(self.activation)
             prev_dim = hidden_dim
 
-        self.features = nn.ModuleList(layers)
-        self.classifier = LinearDFA(
-            prev_dim,
-            num_classes,
-            num_classes=num_classes,
-            bias=bias,
-            is_classifier_layer=True,
-        )
+
+        self.features = nn.Sequential(*layers)
+        self.classifier = LinearRFA(prev_dim, num_classes, bias=bias)
         self._initialize_weights()
 
     def _initialize_weights(self):
         if self.seed is not None:
             torch.manual_seed(self.seed)
             torch.cuda.manual_seed_all(self.seed)
-
-        linear_layers = [m for m in self.modules() if isinstance(m, LinearDFA)]
+        linear_layers = [m for m in self.modules() if isinstance(m, LinearRFA)]
+        print(linear_layers)
         if not linear_layers:
             return
 
@@ -78,8 +91,9 @@ class Net(nn.Module):
                 linear_layers,
                 distribution="uniform",
                 mean=0.0,
-                std= 0.30,
+                std=self.arora_std,
                 bias_value=0.0,
+                shuffle=False,
             )
         elif self.init_method == "bp_adversary":
             bp_adversary_initialization(
@@ -88,7 +102,7 @@ class Net(nn.Module):
                 c=self.c,
                 bias_value=0.0,
             )
-        else:
+        elif self.init_method in ("kaiming", "he", "glorot", "xavier", "orthogonal", "zeros"):
             for layer in linear_layers:
                 initialize_linear_layer(
                     layer,
@@ -99,21 +113,21 @@ class Net(nn.Module):
                     learning_rate=self.learning_rate,
                     c=self.c,
                 )
+        else:
+            for layer in linear_layers:
+                nn.init.uniform_(layer.weight, -0.025, 0.025)
+                if layer.bias is not None:
+                    nn.init.constant_(layer.bias, 0.0)
 
+        # Initialize the feedback matrices B after forward weights are set.
+        # This ensures forward weight initialization consumes the same RNG sequence
+        # as the standard model.
         for layer in linear_layers:
-            # Keep classifier feedback unconstrained; random feedback elsewhere.
-            if layer.is_classifier_layer:
-                layer.B.fill_(1.0)
-            else:
-                # nn.init.kaiming_uniform_(layer.B, a=math.sqrt(5))
-                # nn.init.kaiming_uniform_(layer.R, a=math.sqrt(5))
-                nn.init.uniform_(layer.B, -self.feedback_range, self.feedback_range)
+            # nn.init.kaiming_uniform_(layer.B, a=math.sqrt(5))
+            # nn.init.uniform_(layer.B, -0.01, 0.01)
+            nn.init.uniform_(layer.B, -self.feedback_range, self.feedback_range)
 
-    def forward(self, x, global_error=None):
-        for layer in self.features:
-            if isinstance(layer, LinearDFA):
-                x = layer(x, global_error=global_error)
-            else:
-                x = layer(x)
-        x = self.classifier(x, global_error=global_error)
+    def forward(self, x):
+        x = self.features(x)
+        x = self.classifier(x)
         return x

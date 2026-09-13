@@ -27,6 +27,7 @@ class Net(nn.Module):
         init_gain=1.0,
         learning_rate=0.01,
         c=0.5,
+        feedback_range=0.1,
     ):
         """
         Fully connected neural network with random feedback alignment and configurable hidden layers.
@@ -54,6 +55,7 @@ class Net(nn.Module):
         self.init_gain = init_gain
         self.learning_rate = learning_rate
         self.c = c
+        self.feedback_range = feedback_range
 
         if hidden_layers is None:
             hidden_layers = [1024]
@@ -87,7 +89,7 @@ class Net(nn.Module):
                 linear_layers,
                 distribution="uniform",
                 mean=0.0,
-                std=0.30,
+                std=1000.0,
                 bias_value=0.0,
             )
         elif self.init_method == "bp_adversary":
@@ -104,6 +106,7 @@ class Net(nn.Module):
                     method=self.init_method,
                     gain=self.init_gain,
                     bias_value=0.0,
+                    nonlinearity=self.activation.__class__.__name__.lower(),
                     learning_rate=self.learning_rate,
                     c=self.c,
                 )
@@ -113,7 +116,7 @@ class Net(nn.Module):
         # as the standard model.
         for layer in linear_layers:
             # nn.init.kaiming_uniform_(layer.B, a=math.sqrt(5))
-            nn.init.uniform_(layer.B, -0.1, 0.1)
+            nn.init.uniform_(layer.B, -self.feedback_range, self.feedback_range)
 
     def forward(self, x):
         x = self.features(x)

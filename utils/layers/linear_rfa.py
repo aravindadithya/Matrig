@@ -81,7 +81,7 @@ class LinearRFA(nn.Module):
         # Fixed random feedback matrix; model initialization resamples it as well.
         self.register_buffer('B', torch.empty(out_features, in_features))
         # nn.init.kaiming_uniform_(self.B, a=math.sqrt(5))
-        nn.init.uniform_(self.B, -0.01, 0.01)
+        #nn.init.uniform_(self.B, -0.01, 0.01)
 
     def forward(self, input):
         return LinearRFAFunction.apply(input, self.weight, self.bias, self.B)
