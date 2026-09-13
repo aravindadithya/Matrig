@@ -28,6 +28,7 @@ class Net(nn.Module):
         learning_rate=0.01,
         c=0.5,
         feedback_range=0.05,
+        arora_std=0.30,
     ):
         """
         Fully connected neural network with random feedback alignment and configurable hidden layers.
@@ -56,6 +57,7 @@ class Net(nn.Module):
         self.learning_rate = learning_rate
         self.c = c
         self.feedback_range = feedback_range
+        self.arora_std = arora_std
 
         if hidden_layers is None:
             hidden_layers = [1024]
@@ -89,7 +91,7 @@ class Net(nn.Module):
                 linear_layers,
                 distribution="uniform",
                 mean=0.0,
-                std=1000,
+                std=self.arora_std,
                 bias_value=0.0,
                 shuffle=False,
             )
@@ -118,10 +120,11 @@ class Net(nn.Module):
                     nn.init.constant_(layer.bias, 0.0)
 
         # Initialize the feedback matrices B after forward weights are set.
-        # This ensures forward weight initialization consumes the same RNG sequence 
+        # This ensures forward weight initialization consumes the same RNG sequence
         # as the standard model.
         for layer in linear_layers:
             # nn.init.kaiming_uniform_(layer.B, a=math.sqrt(5))
+            # nn.init.uniform_(layer.B, -0.01, 0.01)
             nn.init.uniform_(layer.B, -self.feedback_range, self.feedback_range)
 
     def forward(self, x):

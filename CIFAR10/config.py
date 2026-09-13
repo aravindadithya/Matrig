@@ -88,6 +88,7 @@ def get_untrained_net(
     init_method="arora_balanced",
     init_gain=1.0,
     feedback_range=0.05,
+    arora_std=1.0,
 ):
     input_dim = 3 * 32 * 32
     output_dim = 10
@@ -103,6 +104,7 @@ def get_untrained_net(
             init_method=init_method,
             init_gain=init_gain,
             feedback_range=feedback_range,
+            arora_std=arora_std,
         )
     elif mode == "DFA":
         net = model_dfa.Net(
@@ -139,10 +141,9 @@ def get_config(
     init_method="arora_balanced",
     init_gain=1.0,
     feedback_range=0.05,
+    arora_std=1000.0,
     SEED=1000,
 ):
-
-    
 
     trainloader, valloader, testloader = get_loaders(batch_size=256, seed=SEED)
 
@@ -162,6 +163,7 @@ def get_config(
         init_method=init_method,
         init_gain=init_gain,
         feedback_range=feedback_range,
+        arora_std=arora_std,
     )
     
     # optimizer = torch.optim.Adam(net.parameters(), lr=learning_rate)
