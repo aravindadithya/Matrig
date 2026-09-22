@@ -7,6 +7,8 @@ from torch.utils.data import DataLoader, random_split, Subset
 from torchvision import datasets, transforms
 
 from CIFAR10 import model, model_rfa, model_dfa
+from CIFAR10 import model_rfa_2
+
 
 
 def one_hot_collate(batch):
@@ -95,7 +97,7 @@ def get_untrained_net(
 
     # Create network with consistent seed
     if mode == "RFA":
-        net = model_rfa.Net(
+        net = model_rfa_2.Net(
             input_dim,
             num_classes=output_dim,
             activation=activation,

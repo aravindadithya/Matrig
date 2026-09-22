@@ -1,0 +1,9 @@
+run_name,condition,adjacent_layer_pair,average_absolute_cosine_similarity
+rfa_4738_B0.050_2_balanced,balanced,1->2,0.03480755235429432
+rfa_4738_B0.050_2_balanced,balanced,2->3,0.07890878002821734
+rfa_4738_B0.050_2_balanced,balanced,3->4,0.13059954577034746
+rfa_4738_B0.050_2_balanced,balanced,4->5,0.10530092080057658
+rfa_4738_B0.050_2_xavier,xavier,1->2,0.025601072949327636
+rfa_4738_B0.050_2_xavier,xavier,2->3,0.03527340169876754
+rfa_4738_B0.050_2_xavier,xavier,3->4,0.052905370719602246
+rfa_4738_B0.050_2_xavier,xavier,4->5,0.08495272145279054
